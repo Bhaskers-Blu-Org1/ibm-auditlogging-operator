@@ -33,7 +33,7 @@ func BuildServiceAccount(instance *operatorv1alpha1.AuditLogging) *corev1.Servic
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      OperandRBAC,
-			Namespace: InstanceNamespace,
+			Namespace: instance.Namespace,
 			Labels:    metaLabels,
 		},
 	}
@@ -51,7 +51,7 @@ func BuildClusterRoleBinding(instance *operatorv1alpha1.AuditLogging) *rbacv1.Cl
 		Subjects: []rbacv1.Subject{{
 			Kind:      "ServiceAccount",
 			Name:      OperandRBAC,
-			Namespace: InstanceNamespace,
+			Namespace: instance.Namespace,
 		}},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
@@ -138,14 +138,14 @@ func BuildRoleBinding(instance *operatorv1alpha1.AuditLogging) *rbacv1.RoleBindi
 	rb := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      FluentdDaemonSetName,
-			Namespace: InstanceNamespace,
+			Namespace: instance.Namespace,
 			Labels:    metaLabels,
 		},
 		Subjects: []rbacv1.Subject{{
 			APIGroup:  "",
 			Kind:      "ServiceAccount",
 			Name:      OperandRBAC,
-			Namespace: InstanceNamespace,
+			Namespace: instance.Namespace,
 		}},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
@@ -162,7 +162,7 @@ func BuildRole(instance *operatorv1alpha1.AuditLogging) *rbacv1.Role {
 	cr := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      FluentdDaemonSetName,
-			Namespace: InstanceNamespace,
+			Namespace: instance.Namespace,
 			Labels:    metaLabels,
 		},
 		Rules: []rbacv1.PolicyRule{

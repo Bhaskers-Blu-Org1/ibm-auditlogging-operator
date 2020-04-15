@@ -9,7 +9,7 @@ spec:
     listKind: AuditLoggingList
     plural: auditloggings
     singular: auditlogging
-  scope: Cluster
+  scope: Namespaced
   subresources:
     status: {}
   validation:

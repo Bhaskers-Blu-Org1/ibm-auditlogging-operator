@@ -40,8 +40,6 @@ const productID = "068a62892a1e4db39641342e592daa25"
 const productVersion = "3.3.0"
 const productMetric = "FREE"
 
-const InstanceNamespace = "ibm-common-services"
-
 var DefaultStatusForCR = []string{"none"}
 var log = logf.Log.WithName("controller_auditlogging")
 var seconds30 int64 = 30
@@ -61,7 +59,7 @@ func BuildAuditService(instance *operatorv1alpha1.AuditLogging) *corev1.Service 
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      auditLoggingComponentName,
-			Namespace: InstanceNamespace,
+			Namespace: instance.Namespace,
 			Labels:    metaLabels,
 		},
 		Spec: corev1.ServiceSpec{
@@ -189,7 +187,7 @@ func BuildAuditPolicyCRD(instance *operatorv1alpha1.AuditLogging) *extv1beta1.Cu
 
 // BuildConfigMap returns a ConfigMap object
 func BuildConfigMap(instance *operatorv1alpha1.AuditLogging, name string) (*corev1.ConfigMap, error) {
-	reqLogger := log.WithValues("ConfigMap.Namespace", InstanceNamespace, "ConfigMap.Name", name)
+	reqLogger := log.WithValues("ConfigMap.Namespace", instance.Namespace, "ConfigMap.Name", name)
 	metaLabels := LabelsForMetadata(FluentdName)
 	dataMap := make(map[string]string)
 	var err error
@@ -249,7 +247,7 @@ func BuildConfigMap(instance *operatorv1alpha1.AuditLogging, name string) (*core
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: InstanceNamespace,
+			Namespace: instance.Namespace,
 			Labels:    metaLabels,
 		},
 		Data: dataMap,
@@ -306,7 +304,7 @@ func BuildDeploymentForPolicyController(instance *operatorv1alpha1.AuditLogging)
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      AuditPolicyControllerDeploy,
-			Namespace: InstanceNamespace,
+			Namespace: instance.Namespace,
 			Labels:    metaLabels,
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -355,7 +353,7 @@ func BuildCertsForAuditLogging(instance *operatorv1alpha1.AuditLogging, issuer s
 	certificate := &certmgr.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: InstanceNamespace,
+			Namespace: instance.Namespace,
 			Labels:    metaLabels,
 		},
 		Spec: certmgr.CertificateSpec{
@@ -422,7 +420,7 @@ func BuildDaemonForFluentd(instance *operatorv1alpha1.AuditLogging) *appsv1.Daem
 	daemon := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      FluentdDaemonSetName,
-			Namespace: InstanceNamespace,
+			Namespace: instance.Namespace,
 			Labels:    metaLabels,
 		},
 		Spec: appsv1.DaemonSetSpec{

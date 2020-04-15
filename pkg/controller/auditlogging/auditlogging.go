@@ -36,15 +36,15 @@ import (
 )
 
 func (r *ReconcileAuditLogging) updateStatus(instance *operatorv1alpha1.AuditLogging) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Namespace", res.InstanceNamespace, "Name", instance.Name)
+	reqLogger := log.WithValues("Namespace", instance.Namespace, "Name", instance.Name)
 
 	podList := &corev1.PodList{}
 	listOpts := []client.ListOption{
-		client.InNamespace(res.InstanceNamespace),
+		client.InNamespace(instance.Namespace),
 		client.MatchingLabels(res.LabelsForSelector(res.FluentdName, instance.Name)),
 	}
 	if err := r.client.List(context.TODO(), podList, listOpts...); err != nil {
-		reqLogger.Error(err, "Failed to list pods", "AuditLogging.Namespace", res.InstanceNamespace, "AuditLogging.Name", instance.Name)
+		reqLogger.Error(err, "Failed to list pods", "AuditLogging.Namespace", instance.Namespace, "AuditLogging.Name", instance.Name)
 		return reconcile.Result{}, err
 	}
 	podNames := []string{}
@@ -54,11 +54,11 @@ func (r *ReconcileAuditLogging) updateStatus(instance *operatorv1alpha1.AuditLog
 
 	// Get audit-policy-controller pod too
 	listOpts = []client.ListOption{
-		client.InNamespace(res.InstanceNamespace),
+		client.InNamespace(instance.Namespace),
 		client.MatchingLabels(res.LabelsForSelector(res.AuditPolicyControllerDeploy, instance.Name)),
 	}
 	if err := r.client.List(context.TODO(), podList, listOpts...); err != nil {
-		reqLogger.Error(err, "Failed to list pods", "AuditLogging.Namespace", res.InstanceNamespace, "AuditLogging.Name", instance.Name)
+		reqLogger.Error(err, "Failed to list pods", "AuditLogging.Namespace", instance.Namespace, "AuditLogging.Name", instance.Name)
 		return reconcile.Result{}, err
 	}
 	for _, pod := range podList.Items {
@@ -78,10 +78,10 @@ func (r *ReconcileAuditLogging) updateStatus(instance *operatorv1alpha1.AuditLog
 }
 
 func (r *ReconcileAuditLogging) createOrUpdateService(instance *operatorv1alpha1.AuditLogging) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Service.Namespace", res.InstanceNamespace, "instance.Name", instance.Name)
+	reqLogger := log.WithValues("Service.Namespace", instance.Namespace, "instance.Name", instance.Name)
 	expected := res.BuildAuditService(instance)
 	found := &corev1.Service{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: expected.Name, Namespace: res.InstanceNamespace}, found)
+	err := r.client.Get(context.TODO(), types.NamespacedName{Name: expected.Name, Namespace: instance.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
 		if err := controllerutil.SetControllerReference(instance, expected, r.scheme); err != nil {
 			return reconcile.Result{}, err
@@ -117,15 +117,15 @@ func (r *ReconcileAuditLogging) createOrUpdateService(instance *operatorv1alpha1
 }
 
 func (r *ReconcileAuditLogging) createAuditPolicyCRD(instance *operatorv1alpha1.AuditLogging) (reconcile.Result, error) {
-	reqLogger := log.WithValues("CRD.Namespace", res.InstanceNamespace, "instance.Name", instance.Name)
+	reqLogger := log.WithValues("CRD.Namespace", instance.Namespace, "instance.Name", instance.Name)
 	expected := res.BuildAuditPolicyCRD(instance)
 	found := &extv1beta1.CustomResourceDefinition{}
 	err := r.client.Get(context.TODO(), types.NamespacedName{Name: expected.Name}, found)
 	if err != nil && errors.IsNotFound(err) {
 		// Define a new CRD
-		if err := controllerutil.SetControllerReference(instance, expected, r.scheme); err != nil {
-			return reconcile.Result{}, err
-		}
+		// if err := controllerutil.SetControllerReference(instance, expected, r.scheme); err != nil {
+		// 	return reconcile.Result{}, err
+		// }
 		reqLogger.Info("Creating a new Audit Policy CRD", "CRD.Namespace", expected.Namespace, "CRD.Name", expected.Name)
 		err = r.client.Create(context.TODO(), expected)
 		if err != nil && errors.IsAlreadyExists(err) {
@@ -158,15 +158,15 @@ func (r *ReconcileAuditLogging) createOrUpdateServiceAccount(cr *operatorv1alpha
 
 	// If ServiceAccount does not exist, create it and requeue
 	foundSvcAcct := &corev1.ServiceAccount{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: expectedRes.Name, Namespace: res.InstanceNamespace}, foundSvcAcct)
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: expectedRes.Name, Namespace: cr.Namespace}, foundSvcAcct)
 	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Creating a new ServiceAccount", "Namespace", res.InstanceNamespace, "Name", expectedRes.Name)
+		reqLogger.Info("Creating a new ServiceAccount", "Namespace", cr.Namespace, "Name", expectedRes.Name)
 		err = r.client.Create(context.TODO(), expectedRes)
 		if err != nil && errors.IsAlreadyExists(err) {
 			// Already exists from previous reconcile, requeue.
 			return reconcile.Result{Requeue: true}, nil
 		} else if err != nil {
-			reqLogger.Error(err, "Failed to create new ServiceAccount", "Namespace", res.InstanceNamespace, "Name", expectedRes.Name)
+			reqLogger.Error(err, "Failed to create new ServiceAccount", "Namespace", cr.Namespace, "Name", expectedRes.Name)
 			return reconcile.Result{}, err
 		}
 		// Created successfully - return and requeue
@@ -182,7 +182,7 @@ func (r *ReconcileAuditLogging) createOrUpdateServiceAccount(cr *operatorv1alpha
 }
 
 func (r *ReconcileAuditLogging) createOrUpdateClusterRole(instance *operatorv1alpha1.AuditLogging) (reconcile.Result, error) {
-	reqLogger := log.WithValues("ClusterRole.Namespace", res.InstanceNamespace, "instance.Name", instance.Name)
+	reqLogger := log.WithValues("ClusterRole.Namespace", instance.Namespace, "instance.Name", instance.Name)
 	expected := res.BuildClusterRole(instance)
 	found := &rbacv1.ClusterRole{}
 	// Note: clusterroles are cluster-scoped, so this does not search using namespace (unlike other resources above)
@@ -190,9 +190,9 @@ func (r *ReconcileAuditLogging) createOrUpdateClusterRole(instance *operatorv1al
 	if err != nil && errors.IsNotFound(err) {
 		// Define a new ClusterRole
 		// newClusterRole := res.BuildClusterRole(instance)
-		if err := controllerutil.SetControllerReference(instance, expected, r.scheme); err != nil {
-			return reconcile.Result{}, err
-		}
+		// if err := controllerutil.SetControllerReference(instance, expected, r.scheme); err != nil {
+		// 	return reconcile.Result{}, err
+		// }
 		reqLogger.Info("Creating a new ClusterRole", "ClusterRole.Namespace", expected.Namespace, "ClusterRole.Name", expected.Name)
 		err = r.client.Create(context.TODO(), expected)
 		if err != nil && errors.IsAlreadyExists(err) {
@@ -224,16 +224,16 @@ func (r *ReconcileAuditLogging) createOrUpdateClusterRole(instance *operatorv1al
 }
 
 func (r *ReconcileAuditLogging) createOrUpdateClusterRoleBinding(instance *operatorv1alpha1.AuditLogging) (reconcile.Result, error) {
-	reqLogger := log.WithValues("ClusterRoleBinding.Namespace", res.InstanceNamespace, "instance.Name", instance.Name)
+	reqLogger := log.WithValues("ClusterRoleBinding.Namespace", instance.Namespace, "instance.Name", instance.Name)
 	expected := res.BuildClusterRoleBinding(instance)
 	found := &rbacv1.ClusterRoleBinding{}
 	// Note: clusterroles are cluster-scoped, so this does not search using namespace (unlike other resources above)
 	err := r.client.Get(context.TODO(), types.NamespacedName{Name: expected.Name}, found)
 	if err != nil && errors.IsNotFound(err) {
 		// Define a new Role
-		if err := controllerutil.SetControllerReference(instance, expected, r.scheme); err != nil {
-			return reconcile.Result{}, err
-		}
+		// if err := controllerutil.SetControllerReference(instance, expected, r.scheme); err != nil {
+		// 	return reconcile.Result{}, err
+		// }
 		reqLogger.Info("Creating a new ClusterRoleBinding", "ClusterRole.Namespace", expected.Namespace, "ClusterRoleBinding.Name", expected.Name)
 		err = r.client.Create(context.TODO(), expected)
 		if err != nil && errors.IsAlreadyExists(err) {
@@ -264,11 +264,11 @@ func (r *ReconcileAuditLogging) createOrUpdateClusterRoleBinding(instance *opera
 }
 
 func (r *ReconcileAuditLogging) createOrUpdateRole(instance *operatorv1alpha1.AuditLogging) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Role.Namespace", res.InstanceNamespace, "instance.Name", instance.Name)
+	reqLogger := log.WithValues("Role.Namespace", instance.Namespace, "instance.Name", instance.Name)
 	expected := res.BuildRole(instance)
 	found := &rbacv1.Role{}
 	// Note: clusterroles are cluster-scoped, so this does not search using namespace (unlike other resources above)
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: expected.Name, Namespace: res.InstanceNamespace}, found)
+	err := r.client.Get(context.TODO(), types.NamespacedName{Name: expected.Name, Namespace: instance.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
 		// Define a new Role
 		// newClusterRole := res.BuildRole(instance)
@@ -307,11 +307,11 @@ func (r *ReconcileAuditLogging) createOrUpdateRole(instance *operatorv1alpha1.Au
 }
 
 func (r *ReconcileAuditLogging) createOrUpdateRoleBinding(instance *operatorv1alpha1.AuditLogging) (reconcile.Result, error) {
-	reqLogger := log.WithValues("RoleBinding.Namespace", res.InstanceNamespace, "instance.Name", instance.Name)
+	reqLogger := log.WithValues("RoleBinding.Namespace", instance.Namespace, "instance.Name", instance.Name)
 	expected := res.BuildRoleBinding(instance)
 	found := &rbacv1.RoleBinding{}
 	// Note: clusterroles are cluster-scoped, so this does not search using namespace (unlike other resources above)
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: expected.Name, Namespace: res.InstanceNamespace}, found)
+	err := r.client.Get(context.TODO(), types.NamespacedName{Name: expected.Name, Namespace: instance.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
 		// Define a new Role
 		if err := controllerutil.SetControllerReference(instance, expected, r.scheme); err != nil {
@@ -347,11 +347,11 @@ func (r *ReconcileAuditLogging) createOrUpdateRoleBinding(instance *operatorv1al
 }
 
 func (r *ReconcileAuditLogging) createOrUpdatePolicyControllerDeployment(instance *operatorv1alpha1.AuditLogging) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Deployment.Namespace", res.InstanceNamespace, "instance.Name", instance.Name)
+	reqLogger := log.WithValues("Deployment.Namespace", instance.Namespace, "instance.Name", instance.Name)
 
 	expected := res.BuildDeploymentForPolicyController(instance)
 	found := &appsv1.Deployment{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: res.AuditPolicyControllerDeploy, Namespace: res.InstanceNamespace}, found)
+	err := r.client.Get(context.TODO(), types.NamespacedName{Name: res.AuditPolicyControllerDeploy, Namespace: instance.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
 		// Define a new Deployment
 		if err := controllerutil.SetControllerReference(instance, expected, r.scheme); err != nil {
@@ -379,7 +379,7 @@ func (r *ReconcileAuditLogging) createOrUpdatePolicyControllerDeployment(instanc
 		found.Spec.Template.Spec.Containers = expected.Spec.Template.Spec.Containers
 		err = r.client.Update(context.TODO(), found)
 		if err != nil {
-			reqLogger.Error(err, "Failed to update Deployment", "Namespace", res.InstanceNamespace, "Name", found.Name)
+			reqLogger.Error(err, "Failed to update Deployment", "Namespace", instance.Namespace, "Name", found.Name)
 			return reconcile.Result{}, err
 		}
 		// Spec updated - return and requeue
@@ -412,9 +412,9 @@ func (r *ReconcileAuditLogging) createOrUpdateAuditConfigMaps(instance *operator
 }
 
 func (r *ReconcileAuditLogging) createOrUpdateConfig(instance *operatorv1alpha1.AuditLogging, configName string) (reconcile.Result, error) {
-	reqLogger := log.WithValues("ConfigMap.Namespace", res.InstanceNamespace, "instance.Name", instance.Name)
+	reqLogger := log.WithValues("ConfigMap.Namespace", instance.Namespace, "instance.Name", instance.Name)
 	configMapFound := &corev1.ConfigMap{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: configName, Namespace: res.InstanceNamespace}, configMapFound)
+	err := r.client.Get(context.TODO(), types.NamespacedName{Name: configName, Namespace: instance.Namespace}, configMapFound)
 	if err != nil && errors.IsNotFound(err) {
 		// Define a new ConfigMap
 		newConfigMap, err := res.BuildConfigMap(instance, configName)
@@ -445,10 +445,10 @@ func (r *ReconcileAuditLogging) createOrUpdateConfig(instance *operatorv1alpha1.
 }
 
 func (r *ReconcileAuditLogging) createOrUpdateFluentdDaemonSet(instance *operatorv1alpha1.AuditLogging) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Daemonset.Namespace", res.InstanceNamespace, "instance.Name", instance.Name)
+	reqLogger := log.WithValues("Daemonset.Namespace", instance.Namespace, "instance.Name", instance.Name)
 	expected := res.BuildDaemonForFluentd(instance)
 	found := &appsv1.DaemonSet{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: res.FluentdDaemonSetName, Namespace: res.InstanceNamespace}, found)
+	err := r.client.Get(context.TODO(), types.NamespacedName{Name: res.FluentdDaemonSetName, Namespace: instance.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
 		// Define a new DaemonSet
 		if err := controllerutil.SetControllerReference(instance, expected, r.scheme); err != nil {
@@ -476,7 +476,7 @@ func (r *ReconcileAuditLogging) createOrUpdateFluentdDaemonSet(instance *operato
 		found.Spec.Template.Spec.Containers = expected.Spec.Template.Spec.Containers
 		err = r.client.Update(context.TODO(), found)
 		if err != nil {
-			reqLogger.Error(err, "Failed to update Daemonset", "Namespace", res.InstanceNamespace, "Name", found.Name)
+			reqLogger.Error(err, "Failed to update Daemonset", "Namespace", instance.Namespace, "Name", found.Name)
 			return reconcile.Result{}, err
 		}
 		// Spec updated - return and requeue
@@ -500,7 +500,7 @@ func (r *ReconcileAuditLogging) createOrUpdateAuditCerts(instance *operatorv1alp
 }
 
 func (r *ReconcileAuditLogging) createOrUpdateAuditCertificate(instance *operatorv1alpha1.AuditLogging, name string) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Certificate.Namespace", res.InstanceNamespace, "Instance.Name", instance.Name)
+	reqLogger := log.WithValues("Certificate.Namespace", instance.Namespace, "Instance.Name", instance.Name)
 	expectedCert := res.BuildCertsForAuditLogging(instance, instance.Spec.Fluentd.ClusterIssuer, name)
 	foundCert := &certmgr.Certificate{}
 	err := r.client.Get(context.TODO(), types.NamespacedName{Name: expectedCert.Name, Namespace: expectedCert.ObjectMeta.Namespace}, foundCert)

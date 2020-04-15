@@ -1,4 +1,4 @@
-kind: ClusterRoleBinding
+kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: ibm-auditlogging-operator
@@ -7,6 +7,6 @@ subjects:
   name: ibm-auditlogging-operator
   namespace: ibm-common-services
 roleRef:
-  kind: ClusterRole
+  kind: Role
   name: ibm-auditlogging-operator
   apiGroup: rbac.authorization.k8s.io
