@@ -6,11 +6,16 @@ spec:
   fluentd:
     enabled: true
     imageRegistry: quay.io/opencloudio/
-    imageTag: v1.6.2-ruby25
+    imageTag: v1.6.2-ubi7
     pullPolicy: IfNotPresent
     journalPath: /var/log/journal
+    outputPlugin:
+      qradar:
+        host: rowan1.fyre.ibm.com
+        port: "514"
+        hostname: pasty-sys
   policyController:
     imageRegistry: quay.io/opencloudio/
-    imageTag: 3.5.0
+    imageTag: 3.4.0
     pullPolicy: IfNotPresent
     verbosity: "0"

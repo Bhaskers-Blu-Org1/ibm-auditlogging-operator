@@ -24,7 +24,6 @@ import (
 
 	operatorv1alpha1 "github.com/ibm/ibm-auditlogging-operator/pkg/apis/operator/v1alpha1"
 	certmgr "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1alpha1"
-	yaml "gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	extv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
@@ -185,76 +184,6 @@ func BuildAuditPolicyCRD(instance *operatorv1alpha1.AuditLogging) *extv1beta1.Cu
 	}
 
 	return crd
-}
-
-// BuildConfigMap returns a ConfigMap object
-func BuildConfigMap(instance *operatorv1alpha1.AuditLogging, name string) (*corev1.ConfigMap, error) {
-	reqLogger := log.WithValues("ConfigMap.Namespace", InstanceNamespace, "ConfigMap.Name", name)
-	metaLabels := LabelsForMetadata(FluentdName)
-	dataMap := make(map[string]string)
-	var err error
-	switch name {
-	case FluentdDaemonSetName + "-" + ConfigName:
-		dataMap[enableAuditLogForwardKey] = strconv.FormatBool(instance.Spec.Fluentd.EnableAuditLoggingForwarding)
-		type Data struct {
-			Value string `yaml:"fluent.conf"`
-		}
-		d := Data{}
-		err = yaml.Unmarshal([]byte(fluentdMainConfigData), &d)
-		dataMap[fluentdConfigKey] = d.Value
-	case FluentdDaemonSetName + "-" + SourceConfigName:
-		type DataS struct {
-			Value string `yaml:"source.conf"`
-		}
-		ds := DataS{}
-		var result string
-		if instance.Spec.Fluentd.JournalPath != "" {
-			result = sourceConfigData1 + instance.Spec.Fluentd.JournalPath + sourceConfigData2
-		} else {
-			result = sourceConfigData1 + defaultJournalPath + sourceConfigData2
-		}
-		var p string
-		if res, port := getHTTPPort(instance.Spec.Fluentd.HTTPPort); res {
-			p = strconv.Itoa(int(port))
-		} else {
-			p = strconv.Itoa(defaultHTTPPort)
-		}
-		result += sourceConfigData3 + p + sourceConfigData4
-		err = yaml.Unmarshal([]byte(result), &ds)
-		dataMap[sourceConfigKey] = ds.Value
-	case FluentdDaemonSetName + "-" + SplunkConfigName:
-		type DataSplunk struct {
-			Value string `yaml:"splunkHEC.conf"`
-		}
-		dsplunk := DataSplunk{}
-		err = yaml.Unmarshal([]byte(splunkConfigData), &dsplunk)
-		if err != nil {
-			reqLogger.Error(err, "Failed to unmarshall data for "+name)
-		}
-		dataMap[splunkConfigKey] = dsplunk.Value
-	case FluentdDaemonSetName + "-" + QRadarConfigName:
-		type DataQRadar struct {
-			Value string `yaml:"remoteSyslog.conf"`
-		}
-		dq := DataQRadar{}
-		err = yaml.Unmarshal([]byte(qRadarConfigData), &dq)
-		dataMap[qRadarConfigKey] = dq.Value
-	default:
-		reqLogger.Info("Unknown ConfigMap name")
-	}
-	if err != nil {
-		reqLogger.Error(err, "Failed to unmarshall data for "+name)
-		return nil, err
-	}
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: InstanceNamespace,
-			Labels:    metaLabels,
-		},
-		Data: dataMap,
-	}
-	return cm, nil
 }
 
 // BuildDeploymentForPolicyController returns a Deployment object

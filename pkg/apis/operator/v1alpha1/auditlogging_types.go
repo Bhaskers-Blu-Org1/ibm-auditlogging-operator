@@ -34,13 +34,34 @@ type AuditLoggingSpec struct {
 
 // AuditLoggingSpecFluentd defines the desired state of Fluentd
 type AuditLoggingSpecFluentd struct {
-	EnableAuditLoggingForwarding bool   `json:"enabled,omitempty"`
-	ImageRegistry                string `json:"imageRegistry,omitempty"`
-	ImageTag                     string `json:"imageTag,omitempty"`
-	PullPolicy                   string `json:"pullPolicy,omitempty"`
-	JournalPath                  string `json:"journalPath,omitempty"`
-	ClusterIssuer                string `json:"clusterIssuer,omitempty"`
-	HTTPPort                     string `json:"httpPort,omitempty"`
+	EnableAuditLoggingForwarding bool                   `json:"enabled,omitempty"`
+	OutputPlugin                 AuditLoggingSpecOutput `json:"outputPlugin,omitempty"`
+	ImageRegistry                string                 `json:"imageRegistry,omitempty"`
+	ImageTag                     string                 `json:"imageTag,omitempty"`
+	PullPolicy                   string                 `json:"pullPolicy,omitempty"`
+	JournalPath                  string                 `json:"journalPath,omitempty"`
+	ClusterIssuer                string                 `json:"clusterIssuer,omitempty"`
+	HTTPPort                     string                 `json:"httpPort,omitempty"`
+}
+
+// AuditLoggingSpecOutput defines the desired Output Plugin
+type AuditLoggingSpecOutput struct {
+	Splunk AuditLoggingSpecSplunk `json:"splunk,omitempty"`
+	QRadar AuditLoggingSpecQRadar `json:"qradar,omitempty"`
+}
+
+// AuditLoggingSpecSplunk defines the desired state of Splunk
+type AuditLoggingSpecSplunk struct {
+	Host  string `json:"host"`
+	Port  string `json:"port"`
+	Token string `json:"token"`
+}
+
+// AuditLoggingSpecQRadar defines the desired state of QRadar
+type AuditLoggingSpecQRadar struct {
+	Host     string `json:"host"`
+	Port     string `json:"port"`
+	Hostname string `json:"hostname"`
 }
 
 // AuditLoggingSpecPolicyController defines the policy controller configuration in the the audit logging spec

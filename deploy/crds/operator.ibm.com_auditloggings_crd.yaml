@@ -32,7 +32,10 @@ spec:
           description: AuditLoggingSpec defines the desired state of AuditLogging
           properties:
             fluentd:
-              description: AuditLoggingSpecFluentd defines the desired state of Fluentd
+              description: 'INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
+                Important: Run "operator-sdk generate k8s" to regenerate code after
+                modifying this file Add custom validation using kubebuilder tags:
+                https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html'
               properties:
                 clusterIssuer:
                   type: string
@@ -46,6 +49,41 @@ spec:
                   type: string
                 journalPath:
                   type: string
+                outputPlugin:
+                  description: AuditLoggingSpecOutput defines the desired Output Plugin
+                    Splunk
+                  properties:
+                    qradar:
+                      description: AuditLoggingSpecQRadar defines the desired state
+                        of QRadar
+                      properties:
+                        host:
+                          type: string
+                        hostname:
+                          type: string
+                        port:
+                          type: string
+                      required:
+                      - host
+                      - hostname
+                      - port
+                      type: object
+                    splunk:
+                      description: AuditLoggingSpecSplunk defines the desired state
+                        of Splunk
+                      properties:
+                        host:
+                          type: string
+                        port:
+                          type: string
+                        token:
+                          type: string
+                      required:
+                      - host
+                      - port
+                      - token
+                      type: object
+                  type: object
                 pullPolicy:
                   type: string
               type: object
