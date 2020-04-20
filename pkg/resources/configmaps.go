@@ -32,7 +32,7 @@ fluent.conf: |-
     # Input plugins (Supports Systemd and HTTP)
     @include /fluentd/etc/source.conf
 
-    # Output plugins (Only use one output plugin conf file at a time. Comment or remove other files)
+    # Output plugins (Only use one output plugin conf file at a time.)
 `
 var qradarPlugin = `@include /fluentd/etc/remoteSyslog.conf`
 var splunkPlugin = `@include /fluentd/etc/splunkHEC.conf`
@@ -188,11 +188,9 @@ func BuildConfigMap(instance *operatorv1alpha1.AuditLogging, name string) (*core
 func buildFluentdConfig(instance *operatorv1alpha1.AuditLogging) string {
 	var result = fluentdMainConfigData
 	if instance.Spec.Fluentd.OutputPlugin.Splunk != (operatorv1alpha1.AuditLoggingSpecSplunk{}) {
-		result += yamlLine(1, splunkPlugin, true) + yamlLine(1, `#`+qradarPlugin, false)
+		result += yamlLine(1, splunkPlugin, true)
 	} else if instance.Spec.Fluentd.OutputPlugin.QRadar != (operatorv1alpha1.AuditLoggingSpecQRadar{}) {
-		result += yamlLine(1, qradarPlugin, true) + yamlLine(1, `#`+splunkPlugin, false)
-	} else {
-		result += yamlLine(1, `#`+qradarPlugin, true) + yamlLine(1, `#`+splunkPlugin, false)
+		result += yamlLine(1, qradarPlugin, true)
 	}
 	return result
 }

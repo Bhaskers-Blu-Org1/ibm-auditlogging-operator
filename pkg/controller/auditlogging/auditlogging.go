@@ -440,14 +440,15 @@ func (r *ReconcileAuditLogging) createOrUpdateConfig(instance *operatorv1alpha1.
 	} else if err != nil {
 		reqLogger.Error(err, "Failed to get ConfigMap")
 		return reconcile.Result{}, err
-	} else if expected.Name == (res.FluentdDaemonSetName+"-"+res.SplunkConfigName) || expected.Name == (res.FluentdDaemonSetName+"-"+res.QRadarConfigName) {
+	} else if expected.Name == (res.FluentdDaemonSetName+"-"+res.SplunkConfigName) ||
+		expected.Name == (res.FluentdDaemonSetName+"-"+res.QRadarConfigName) ||
+		expected.Name == (res.FluentdDaemonSetName+"-"+res.ConfigName) {
 		if result := res.EqualConfigMaps(expected, found); result {
 			// If spec is incorrect, update it and requeue
 			reqLogger.Info("Found configmap data is incorrect", "Found", found.Data, "Expected", expected.Data)
-			found.Data = expected.Data
-			err = r.client.Update(context.TODO(), found)
+			err = r.client.Delete(context.TODO(), found)
 			if err != nil {
-				reqLogger.Error(err, "Failed to update ConfigMap", "Namespace", res.InstanceNamespace, "Name", found.Name)
+				reqLogger.Error(err, "Failed to delete ConfigMap", "Namespace", res.InstanceNamespace, "Name", found.Name)
 				return reconcile.Result{}, err
 			}
 			// Data updated - return and requeue
