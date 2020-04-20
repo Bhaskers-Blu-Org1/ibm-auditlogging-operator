@@ -413,26 +413,26 @@ func (r *ReconcileAuditLogging) createOrUpdateAuditConfigMaps(instance *operator
 
 func (r *ReconcileAuditLogging) createOrUpdateConfig(instance *operatorv1alpha1.AuditLogging, configName string) (reconcile.Result, error) {
 	reqLogger := log.WithValues("ConfigMap.Namespace", res.InstanceNamespace, "instance.Name", instance.Name)
-	configMapFound := &corev1.ConfigMap{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: configName, Namespace: res.InstanceNamespace}, configMapFound)
+	found := &corev1.ConfigMap{}
+	expected, err := res.BuildConfigMap(instance, configName)
+	if err != nil {
+		reqLogger.Error(err, "Failed to create ConfigMap")
+		return reconcile.Result{}, err
+	}
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: expected.Name, Namespace: res.InstanceNamespace}, found)
 	if err != nil && errors.IsNotFound(err) {
 		// Define a new ConfigMap
-		newConfigMap, err := res.BuildConfigMap(instance, configName)
-		if err != nil {
-			reqLogger.Error(err, "Failed to create ConfigMap")
+		if err := controllerutil.SetControllerReference(instance, expected, r.scheme); err != nil {
 			return reconcile.Result{}, err
 		}
-		if err := controllerutil.SetControllerReference(instance, newConfigMap, r.scheme); err != nil {
-			return reconcile.Result{}, err
-		}
-		reqLogger.Info("Creating a new ConfigMap", "ConfigMap.Namespace", newConfigMap.Namespace, "ConfigMap.Name", newConfigMap.Name)
-		err = r.client.Create(context.TODO(), newConfigMap)
+		reqLogger.Info("Creating a new ConfigMap", "ConfigMap.Namespace", expected.Namespace, "ConfigMap.Name", expected.Name)
+		err = r.client.Create(context.TODO(), expected)
 		if err != nil && errors.IsAlreadyExists(err) {
 			// Already exists from previous reconcile, requeue.
 			return reconcile.Result{Requeue: true}, nil
 		} else if err != nil {
-			reqLogger.Error(err, "Failed to create new ConfigMap", "ConfigMap.Namespace", newConfigMap.Namespace,
-				"ConfigMap.Name", newConfigMap.Name)
+			reqLogger.Error(err, "Failed to create new ConfigMap", "ConfigMap.Namespace", expected.Namespace,
+				"ConfigMap.Name", expected.Name)
 			return reconcile.Result{}, err
 		}
 		// ConfigMap created successfully - return and requeue
@@ -440,6 +440,19 @@ func (r *ReconcileAuditLogging) createOrUpdateConfig(instance *operatorv1alpha1.
 	} else if err != nil {
 		reqLogger.Error(err, "Failed to get ConfigMap")
 		return reconcile.Result{}, err
+	} else if expected.Name == (res.FluentdDaemonSetName+"-"+res.SplunkConfigName) || expected.Name == (res.FluentdDaemonSetName+"-"+res.QRadarConfigName) {
+		if result := res.EqualConfigMaps(expected, found); result {
+			// If spec is incorrect, update it and requeue
+			reqLogger.Info("Found configmap data is incorrect", "Found", found.Data, "Expected", expected.Data)
+			found.Data = expected.Data
+			err = r.client.Update(context.TODO(), found)
+			if err != nil {
+				reqLogger.Error(err, "Failed to update ConfigMap", "Namespace", res.InstanceNamespace, "Name", found.Name)
+				return reconcile.Result{}, err
+			}
+			// Data updated - return and requeue
+			return reconcile.Result{Requeue: true}, nil
+		}
 	}
 	return reconcile.Result{}, nil
 }

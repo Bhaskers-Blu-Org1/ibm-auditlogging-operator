@@ -17,6 +17,7 @@
 package resources
 
 import (
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -187,12 +188,13 @@ func BuildConfigMap(instance *operatorv1alpha1.AuditLogging, name string) (*core
 func buildFluentdConfig(instance *operatorv1alpha1.AuditLogging) string {
 	var result = fluentdMainConfigData
 	if instance.Spec.Fluentd.OutputPlugin.Splunk != (operatorv1alpha1.AuditLoggingSpecSplunk{}) {
-		return result + yamlLine(1, splunkPlugin, true) + yamlLine(1, `#`+qradarPlugin, false)
+		result += yamlLine(1, splunkPlugin, true) + yamlLine(1, `#`+qradarPlugin, false)
 	} else if instance.Spec.Fluentd.OutputPlugin.QRadar != (operatorv1alpha1.AuditLoggingSpecQRadar{}) {
-		return result + yamlLine(1, qradarPlugin, true) + yamlLine(1, `#`+splunkPlugin, false)
+		result += yamlLine(1, qradarPlugin, true) + yamlLine(1, `#`+splunkPlugin, false)
 	} else {
-		return result + yamlLine(1, `#`+qradarPlugin, true) + yamlLine(1, `#`+splunkPlugin, false)
+		result += yamlLine(1, `#`+qradarPlugin, true) + yamlLine(1, `#`+splunkPlugin, false)
 	}
+	return result
 }
 
 func buildFluentdSourceConfig(instance *operatorv1alpha1.AuditLogging) string {
@@ -238,4 +240,8 @@ func buildFluentdQRadarConfig(instance *operatorv1alpha1.AuditLogging) string {
 		result += yamlLine(3, `hostname QRADAR_LOG_SOURCE_IDENTIFIER_FOR_icp-audit`, false)
 	}
 	return result + qRadarConfigData2
+}
+
+func EqualConfigMaps(expected *corev1.ConfigMap, found *corev1.ConfigMap) bool {
+	return !reflect.DeepEqual(expected.Data, found.Data)
 }
