@@ -493,9 +493,25 @@ func (r *ReconcileAuditLogging) reconcileConfig(instance *operatorv1alpha1.Audit
 		return reconcile.Result{}, err
 	}
 	// ConfigMap was found, check for expected values
+	var update = false
+	if !res.EqualLabels(found.ObjectMeta.Labels, expected.ObjectMeta.Labels) {
+		found.ObjectMeta.Labels = expected.ObjectMeta.Labels
+		update = true
+	}
 
-	if configName == res.FluentdDaemonSetName+"-"+res.SourceConfigName {
+	switch configName {
+	case res.FluentdDaemonSetName + "-" + res.ConfigName:
+		if !reflect.DeepEqual(found.Data[res.EnableAuditLogForwardKey], expected.Data[res.EnableAuditLogForwardKey]) {
+			found.Data[res.EnableAuditLogForwardKey] = expected.Data[res.EnableAuditLogForwardKey]
+			update = true
+		}
+		if !reflect.DeepEqual(found.Data[res.FluentdConfigKey], expected.Data[res.FluentdConfigKey]) {
+			found.Data[res.FluentdConfigKey] = expected.Data[res.FluentdConfigKey]
+			update = true
+		}
+	case res.FluentdDaemonSetName + "-" + res.SourceConfigName:
 		// Ensure default port is used
+		// TODO: Ensure journalPath is correct
 		if result, ports := res.EqualSourceConfig(expected, found); !result {
 			reqLogger.Info("Found source config is incorrect", "Found port", ports[0], "Expected port", ports[1])
 			err = r.client.Delete(context.TODO(), found)
@@ -506,14 +522,8 @@ func (r *ReconcileAuditLogging) reconcileConfig(instance *operatorv1alpha1.Audit
 			// Deleted - return and requeue
 			return reconcile.Result{Requeue: true}, nil
 		}
-	}
-	var update = false
-	if !res.EqualLabels(found.ObjectMeta.Labels, expected.ObjectMeta.Labels) {
-		found.ObjectMeta.Labels = expected.ObjectMeta.Labels
-		update = true
-	}
-	if configName == res.FluentdDaemonSetName+"-"+res.SplunkConfigName ||
-		configName == res.FluentdDaemonSetName+"-"+res.QRadarConfigName {
+	case res.FluentdDaemonSetName + "-" + res.SplunkConfigName:
+	case res.FluentdDaemonSetName + "-" + res.QRadarConfigName:
 		// Ensure match tags are correct
 		if !res.EqualMatchTags(found) {
 			// Keep customer SIEM configs
@@ -529,6 +539,8 @@ func (r *ReconcileAuditLogging) reconcileConfig(instance *operatorv1alpha1.Audit
 			}
 			update = true
 		}
+	default:
+		reqLogger.Info("Unknown ConfigMap name", "Name: ", configName)
 	}
 	if update {
 		err = r.client.Update(context.TODO(), found)

@@ -201,7 +201,13 @@ func BuildDaemonForFluentd(instance *operatorv1alpha1.AuditLogging) *appsv1.Daem
 					},
 					// NodeSelector:                  {},
 					Tolerations: commonTolerations,
-					Volumes:     commonVolumes,
+					HostAliases: []corev1.HostAlias{
+						{
+							IP:        instance.Spec.Fluentd.Output.HostAlias.HostIP,
+							Hostnames: instance.Spec.Fluentd.Output.HostAlias.Hostnames,
+						},
+					},
+					Volumes: commonVolumes,
 					Containers: []corev1.Container{
 						fluentdMainContainer,
 					},
@@ -237,8 +243,8 @@ func BuildCommonVolumes(instance *operatorv1alpha1.AuditLogging) []corev1.Volume
 					},
 					Items: []corev1.KeyToPath{
 						{
-							Key:  fluentdConfigKey,
-							Path: fluentdConfigKey,
+							Key:  FluentdConfigKey,
+							Path: FluentdConfigKey,
 						},
 					},
 				},
@@ -327,8 +333,8 @@ func BuildCommonVolumeMounts(instance *operatorv1alpha1.AuditLogging) []corev1.V
 	commonVolumeMounts := []corev1.VolumeMount{
 		{
 			Name:      FluentdConfigName,
-			MountPath: "/fluentd/etc/" + fluentdConfigKey,
-			SubPath:   fluentdConfigKey,
+			MountPath: "/fluentd/etc/" + FluentdConfigKey,
+			SubPath:   FluentdConfigKey,
 		},
 		{
 			Name:      SourceConfigName,
@@ -405,6 +411,10 @@ func EqualPods(expected corev1.PodTemplateSpec, found corev1.PodTemplateSpec) bo
 	}
 	if !reflect.DeepEqual(found.Spec.ServiceAccountName, expected.Spec.ServiceAccountName) {
 		logger.Info("ServiceAccount not equal", "Found", found.Spec.ServiceAccountName, "Expected", expected.Spec.ServiceAccountName)
+		return false
+	}
+	if !reflect.DeepEqual(found.Spec.HostAliases, expected.Spec.HostAliases) {
+		logger.Info("HostAliases not equal", "Found", found.Spec.HostAliases, "Expected", expected.Spec.HostAliases)
 		return false
 	}
 	if len(found.Spec.Containers) != len(expected.Spec.Containers) {

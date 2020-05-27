@@ -45,9 +45,59 @@ spec:
                 imageRegistry:
                   type: string
                 imageTag:
+                  description: ImageTag deprecated. Define image sha or tag in operator.yaml
                   type: string
                 journalPath:
                   type: string
+                output:
+                  description: AuditLoggingSpecOutput defines the configurations for
+                    forwarding audit logs to Splunk or QRadar
+                  properties:
+                    hostAlias:
+                      description: AuditLoggingSpecHostAlias defines the host alias
+                        for an SIEM
+                      properties:
+                        hostIP:
+                          type: string
+                        hostnames:
+                          items:
+                            type: string
+                          type: array
+                      required:
+                      - hostIP
+                      - hostnames
+                      type: object
+                    qradar:
+                      description: AuditLoggingSpecQRadar defines the configurations
+                        for forwarding audit logs to QRadar
+                      properties:
+                        host:
+                          type: string
+                        hostname:
+                          type: string
+                        port:
+                          type: string
+                      required:
+                      - host
+                      - hostname
+                      - port
+                      type: object
+                    splunk:
+                      description: AuditLoggingSpecSplunk defines the configurations
+                        for forwarding audit logs to Splunk
+                      properties:
+                        host:
+                          type: string
+                        port:
+                          type: string
+                        token:
+                          type: string
+                      required:
+                      - host
+                      - port
+                      - token
+                      type: object
+                  type: object
                 pullPolicy:
                   type: string
               type: object

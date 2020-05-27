@@ -28,7 +28,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const enableAuditLogForwardKey = "ENABLE_AUDIT_LOGGING_FORWARDING"
+const EnableAuditLogForwardKey = "ENABLE_AUDIT_LOGGING_FORWARDING"
+
+var qradarPlugin = `@include /fluentd/etc/remoteSyslog.conf`
+var splunkPlugin = `@include /fluentd/etc/splunkHEC.conf`
 
 // ConfigName defines the name of the config configmap
 const ConfigName = "config"
@@ -45,7 +48,7 @@ const QRadarConfigName = "remote-syslog-config"
 // SplunkConfigName defines the name of the splunk-hec-config configmap
 const SplunkConfigName = "splunk-hec-config"
 
-const fluentdConfigKey = "fluent.conf"
+const FluentdConfigKey = "fluent.conf"
 
 // SourceConfigKey defines the key for the source-config configmap
 const SourceConfigKey = "source.conf"
@@ -125,9 +128,10 @@ var sourceConfigData4 = `
 
 var splunkConfigData1 = `
 splunkHEC.conf: |-
-    <match icp-audit icp-audit.**>`
-var splunkDefaults = `
+    <match icp-audit icp-audit.**>
         @type splunk_hec
+`
+var splunkDefaults = `
         hec_host SPLUNK_SERVER_HOSTNAME
         hec_port SPLUNK_PORT
         hec_token SPLUNK_HEC_TOKEN
@@ -138,11 +142,12 @@ var splunkConfigData2 = `
 
 var qRadarConfigData1 = `
 remoteSyslog.conf: |-
-    <match icp-audit icp-audit.**>`
-var qRadarDefaults = `
+    <match icp-audit icp-audit.**>
         @type copy
         <store>
             @type remote_syslog
+`
+var qRadarDefaults = `
             host QRADAR_SERVER_HOSTNAME
             port QRADAR_PORT_FOR_icp-audit
             hostname QRADAR_LOG_SOURCE_IDENTIFIER_FOR_icp-audit
@@ -175,15 +180,17 @@ func BuildConfigMap(instance *operatorv1alpha1.AuditLogging, name string) (*core
 	metaLabels := LabelsForMetadata(FluentdName)
 	dataMap := make(map[string]string)
 	var err error
+	var data string
 	switch name {
 	case FluentdDaemonSetName + "-" + ConfigName:
-		dataMap[enableAuditLogForwardKey] = strconv.FormatBool(instance.Spec.Fluentd.EnableAuditLoggingForwarding)
+		dataMap[EnableAuditLogForwardKey] = strconv.FormatBool(instance.Spec.Fluentd.EnableAuditLoggingForwarding)
 		type Data struct {
 			Value string `yaml:"fluent.conf"`
 		}
 		d := Data{}
-		err = yaml.Unmarshal([]byte(fluentdMainConfigData), &d)
-		dataMap[fluentdConfigKey] = d.Value
+		data = buildFluentdConfig(instance)
+		err = yaml.Unmarshal([]byte(data), &d)
+		dataMap[FluentdConfigKey] = d.Value
 	case FluentdDaemonSetName + "-" + SourceConfigName:
 		type DataS struct {
 			Value string `yaml:"source.conf"`
@@ -201,14 +208,16 @@ func BuildConfigMap(instance *operatorv1alpha1.AuditLogging, name string) (*core
 		dataMap[SourceConfigKey] = ds.Value
 	case FluentdDaemonSetName + "-" + SplunkConfigName:
 		dsplunk := DataSplunk{}
-		err = yaml.Unmarshal([]byte(splunkConfigData1+splunkDefaults+splunkConfigData2), &dsplunk)
+		data = buildFluentdSplunkConfig(instance)
+		err = yaml.Unmarshal([]byte(data), &dsplunk)
 		if err != nil {
 			reqLogger.Error(err, "Failed to unmarshall data for "+name)
 		}
 		dataMap[SplunkConfigKey] = dsplunk.Value
 	case FluentdDaemonSetName + "-" + QRadarConfigName:
 		dq := DataQRadar{}
-		err = yaml.Unmarshal([]byte(qRadarConfigData1+qRadarDefaults+qRadarConfigData2), &dq)
+		data = buildFluentdQRadarConfig(instance)
+		err = yaml.Unmarshal([]byte(data), &dq)
 		dataMap[QRadarConfigKey] = dq.Value
 	default:
 		reqLogger.Info("Unknown ConfigMap name")
@@ -250,6 +259,46 @@ func getConfig(data string) (string, error) {
 	return siemConfig, nil
 }
 
+func EqualSIEMConfig(instance *operatorv1alpha1.AuditLogging, found *corev1.ConfigMap) bool {
+	var key string
+	if instance.Spec.Fluentd.Output.Splunk != (operatorv1alpha1.AuditLoggingSpecSplunk{}) {
+		key = SplunkConfigKey
+		reHost := regexp.MustCompile(`hec_host .*`)
+		hostFound := reHost.FindStringSubmatch(found.Data[key])[0]
+		if hostFound != instance.Spec.Fluentd.Output.Splunk.Host {
+			return false
+		}
+		rePort := regexp.MustCompile(`hec_port .*`)
+		portFound := rePort.FindStringSubmatch(found.Data[key])[0]
+		if portFound != instance.Spec.Fluentd.Output.Splunk.Port {
+			return false
+		}
+		reToken := regexp.MustCompile(`hec_token .*`)
+		tokenFound := reToken.FindStringSubmatch(found.Data[key])[0]
+		if tokenFound != instance.Spec.Fluentd.Output.Splunk.Token {
+			return false
+		}
+	} else if instance.Spec.Fluentd.Output.QRadar != (operatorv1alpha1.AuditLoggingSpecQRadar{}) {
+		key = QRadarConfigKey
+		reHost := regexp.MustCompile(`host .*`)
+		hostFound := reHost.FindStringSubmatch(found.Data[key])[0]
+		if hostFound != instance.Spec.Fluentd.Output.QRadar.Host {
+			return false
+		}
+		rePort := regexp.MustCompile(`port .*`)
+		portFound := rePort.FindStringSubmatch(found.Data[key])[0]
+		if portFound != instance.Spec.Fluentd.Output.QRadar.Port {
+			return false
+		}
+		reToken := regexp.MustCompile(`hostname .*`)
+		hostnameFound := reToken.FindStringSubmatch(found.Data[key])[0]
+		if hostnameFound != instance.Spec.Fluentd.Output.QRadar.Hostname {
+			return false
+		}
+	}
+	return true
+}
+
 func removeK8sAudit(data string) string {
 	// K8s auditing was deprecated in CS 3.2.4 and removed in CS 3.3
 	return strings.Split(data, "<match kube-audit>")[0]
@@ -261,6 +310,46 @@ func yamlLine(tabs int, line string, newline bool) string {
 		return spaces + line
 	}
 	return spaces + line + "\n"
+}
+
+func buildFluentdConfig(instance *operatorv1alpha1.AuditLogging) string {
+	var result = fluentdMainConfigData
+	if instance.Spec.Fluentd.Output.Splunk != (operatorv1alpha1.AuditLoggingSpecSplunk{}) {
+		result += yamlLine(1, splunkPlugin, true)
+	} else if instance.Spec.Fluentd.Output.QRadar != (operatorv1alpha1.AuditLoggingSpecQRadar{}) {
+		result += yamlLine(1, qradarPlugin, true)
+	}
+	return result
+}
+
+func buildFluentdSplunkConfig(instance *operatorv1alpha1.AuditLogging) string {
+	var result = splunkConfigData1
+	if instance.Spec.Fluentd.Output.Splunk != (operatorv1alpha1.AuditLoggingSpecSplunk{}) {
+		result += yamlLine(2, `hec_host `+instance.Spec.Fluentd.Output.Splunk.Host, true)
+		result += yamlLine(2, `hec_port `+instance.Spec.Fluentd.Output.Splunk.Port, true)
+		result += yamlLine(2, `hec_token `+instance.Spec.Fluentd.Output.Splunk.Token, false)
+	} else {
+		result += yamlLine(2, `hec_host SPLUNK_SERVER_HOSTNAME`, true)
+		result += yamlLine(2, `hec_port SPLUNK_PORT`, true)
+		result += yamlLine(2, `hec_token SPLUNK_HEC_TOKEN`, false)
+	}
+	// need to add user customized configs like buffer ?
+	return result + splunkConfigData2
+}
+
+func buildFluentdQRadarConfig(instance *operatorv1alpha1.AuditLogging) string {
+	var result = qRadarConfigData1
+	if instance.Spec.Fluentd.Output.QRadar != (operatorv1alpha1.AuditLoggingSpecQRadar{}) {
+		result += yamlLine(3, `host `+instance.Spec.Fluentd.Output.QRadar.Host, true)
+		result += yamlLine(3, `port `+instance.Spec.Fluentd.Output.QRadar.Port, true)
+		result += yamlLine(3, `hostname `+instance.Spec.Fluentd.Output.QRadar.Hostname, false)
+	} else {
+		result += yamlLine(3, `host QRADAR_SERVER_HOSTNAME`, true)
+		result += yamlLine(3, `port QRADAR_PORT_FOR_icp-audit`, true)
+		result += yamlLine(3, `hostname QRADAR_LOG_SOURCE_IDENTIFIER_FOR_icp-audit`, false)
+	}
+	// need to add user customized configs like buffer ?
+	return result + qRadarConfigData2
 }
 
 // BuildWithSIEMConfigs returns a String and an Error

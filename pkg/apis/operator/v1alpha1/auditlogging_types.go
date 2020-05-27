@@ -37,10 +37,11 @@ type AuditLoggingSpecFluentd struct {
 	EnableAuditLoggingForwarding bool   `json:"enabled,omitempty"`
 	ImageRegistry                string `json:"imageRegistry,omitempty"`
 	// ImageTag deprecated. Define image sha or tag in operator.yaml
-	ImageTag      string `json:"imageTag,omitempty"`
-	PullPolicy    string `json:"pullPolicy,omitempty"`
-	JournalPath   string `json:"journalPath,omitempty"`
-	ClusterIssuer string `json:"clusterIssuer,omitempty"`
+	ImageTag      string                 `json:"imageTag,omitempty"`
+	PullPolicy    string                 `json:"pullPolicy,omitempty"`
+	JournalPath   string                 `json:"journalPath,omitempty"`
+	ClusterIssuer string                 `json:"clusterIssuer,omitempty"`
+	Output        AuditLoggingSpecOutput `json:"output,omitempty"`
 }
 
 // AuditLoggingSpecPolicyController defines the policy controller configuration in the the audit logging spec
@@ -50,6 +51,33 @@ type AuditLoggingSpecPolicyController struct {
 	PullPolicy    string `json:"pullPolicy,omitempty"`
 	Verbosity     string `json:"verbosity,omitempty"`
 	Frequency     string `json:"frequency,omitempty"`
+}
+
+// AuditLoggingSpecOutput defines the configurations for forwarding audit logs to Splunk or QRadar
+type AuditLoggingSpecOutput struct {
+	Splunk    AuditLoggingSpecSplunk    `json:"splunk,omitempty"`
+	QRadar    AuditLoggingSpecQRadar    `json:"qradar,omitempty"`
+	HostAlias AuditLoggingSpecHostAlias `json:"hostAlias,omitempty"`
+}
+
+// AuditLoggingSpecSplunk defines the configurations for forwarding audit logs to Splunk
+type AuditLoggingSpecSplunk struct {
+	Host  string `json:"host"`
+	Port  string `json:"port"`
+	Token string `json:"token"`
+}
+
+// AuditLoggingSpecQRadar defines the configurations for forwarding audit logs to QRadar
+type AuditLoggingSpecQRadar struct {
+	Host     string `json:"host"`
+	Port     string `json:"port"`
+	Hostname string `json:"hostname"`
+}
+
+// AuditLoggingSpecHostAlias defines the host alias for an SIEM
+type AuditLoggingSpecHostAlias struct {
+	HostIP    string   `json:"hostIP"`
+	Hostnames []string `json:"hostnames"`
 }
 
 // AuditLoggingStatus defines the observed state of AuditLogging
