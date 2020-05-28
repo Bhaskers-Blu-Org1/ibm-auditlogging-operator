@@ -63,14 +63,14 @@ type AuditLoggingSpecOutput struct {
 // AuditLoggingSpecSplunk defines the configurations for forwarding audit logs to Splunk
 type AuditLoggingSpecSplunk struct {
 	Host  string `json:"host"`
-	Port  string `json:"port"`
+	Port  int    `json:"port"`
 	Token string `json:"token"`
 }
 
 // AuditLoggingSpecQRadar defines the configurations for forwarding audit logs to QRadar
 type AuditLoggingSpecQRadar struct {
 	Host     string `json:"host"`
-	Port     string `json:"port"`
+	Port     int    `json:"port"`
 	Hostname string `json:"hostname"`
 }
 

@@ -67,9 +67,7 @@ fluent.conf: |-
     # Input plugins (Supports Systemd and HTTP)
     @include /fluentd/etc/source.conf
 
-    # Output plugins (Only use one output plugin conf file at a time. Comment or remove other files)
-    #@include /fluentd/etc/remoteSyslog.conf
-    #@include /fluentd/etc/splunkHEC.conf
+    # Output plugins (Only use one output plugin conf file at a time.
 `
 
 var sourceConfigData1 = `
@@ -132,6 +130,7 @@ splunkHEC.conf: |-
         @type splunk_hec
 `
 
+// FIX
 // var splunkDefaults = `
 //         hec_host SPLUNK_SERVER_HOSTNAME
 //         hec_port SPLUNK_PORT
@@ -149,6 +148,7 @@ remoteSyslog.conf: |-
             @type remote_syslog
 `
 
+// FIX
 // var qRadarDefaults = `
 //             host QRADAR_SERVER_HOSTNAME
 //             port QRADAR_PORT_FOR_icp-audit
@@ -272,7 +272,7 @@ func EqualSIEMConfig(instance *operatorv1alpha1.AuditLogging, found *corev1.Conf
 		}
 		rePort := regexp.MustCompile(`hec_port .*`)
 		portFound := rePort.FindStringSubmatch(found.Data[key])[0]
-		if portFound != instance.Spec.Fluentd.Output.Splunk.Port {
+		if portFound != strconv.Itoa(instance.Spec.Fluentd.Output.Splunk.Port) {
 			return false
 		}
 		reToken := regexp.MustCompile(`hec_token .*`)
@@ -289,7 +289,7 @@ func EqualSIEMConfig(instance *operatorv1alpha1.AuditLogging, found *corev1.Conf
 		}
 		rePort := regexp.MustCompile(`port .*`)
 		portFound := rePort.FindStringSubmatch(found.Data[key])[0]
-		if portFound != instance.Spec.Fluentd.Output.QRadar.Port {
+		if portFound != strconv.Itoa(instance.Spec.Fluentd.Output.QRadar.Port) {
 			return false
 		}
 		reToken := regexp.MustCompile(`hostname .*`)
@@ -328,7 +328,7 @@ func buildFluentdSplunkConfig(instance *operatorv1alpha1.AuditLogging) string {
 	var result = splunkConfigData1
 	if instance.Spec.Fluentd.Output.Splunk != (operatorv1alpha1.AuditLoggingSpecSplunk{}) {
 		result += yamlLine(2, `hec_host `+instance.Spec.Fluentd.Output.Splunk.Host, true)
-		result += yamlLine(2, `hec_port `+instance.Spec.Fluentd.Output.Splunk.Port, true)
+		result += yamlLine(2, `hec_port `+strconv.Itoa(instance.Spec.Fluentd.Output.Splunk.Port), true)
 		result += yamlLine(2, `hec_token `+instance.Spec.Fluentd.Output.Splunk.Token, false)
 	} else {
 		result += yamlLine(2, `hec_host SPLUNK_SERVER_HOSTNAME`, true)
@@ -343,7 +343,7 @@ func buildFluentdQRadarConfig(instance *operatorv1alpha1.AuditLogging) string {
 	var result = qRadarConfigData1
 	if instance.Spec.Fluentd.Output.QRadar != (operatorv1alpha1.AuditLoggingSpecQRadar{}) {
 		result += yamlLine(3, `host `+instance.Spec.Fluentd.Output.QRadar.Host, true)
-		result += yamlLine(3, `port `+instance.Spec.Fluentd.Output.QRadar.Port, true)
+		result += yamlLine(3, `port `+strconv.Itoa(instance.Spec.Fluentd.Output.QRadar.Port), true)
 		result += yamlLine(3, `hostname `+instance.Spec.Fluentd.Output.QRadar.Hostname, false)
 	} else {
 		result += yamlLine(3, `host QRADAR_SERVER_HOSTNAME`, true)

@@ -201,19 +201,22 @@ func BuildDaemonForFluentd(instance *operatorv1alpha1.AuditLogging) *appsv1.Daem
 					},
 					// NodeSelector:                  {},
 					Tolerations: commonTolerations,
-					HostAliases: []corev1.HostAlias{
-						{
-							IP:        instance.Spec.Fluentd.Output.HostAlias.HostIP,
-							Hostnames: instance.Spec.Fluentd.Output.HostAlias.Hostnames,
-						},
-					},
-					Volumes: commonVolumes,
+					Volumes:     commonVolumes,
 					Containers: []corev1.Container{
 						fluentdMainContainer,
 					},
 				},
 			},
 		},
+	}
+
+	if instance.Spec.Fluentd.Output.HostAlias.HostIP != "" {
+		daemon.Spec.Template.Spec.HostAliases = []corev1.HostAlias{
+			{
+				IP:        instance.Spec.Fluentd.Output.HostAlias.HostIP,
+				Hostnames: instance.Spec.Fluentd.Output.HostAlias.Hostnames,
+			},
+		}
 	}
 	return daemon
 }
