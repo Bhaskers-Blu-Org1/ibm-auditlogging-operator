@@ -64,12 +64,12 @@ const OutputPluginMatches = "icp-audit icp-audit.**"
 
 var fluentdMainConfigData = `
 fluent.conf: |-
-  # Input plugins (Supports Systemd and HTTP)
-  @include /fluentd/etc/source.conf
+    # Input plugins (Supports Systemd and HTTP)
+    @include /fluentd/etc/source.conf
 
-  # Output plugins (Only use one output plugin conf file at a time. Comment or remove other files)
-  #@include /fluentd/etc/remoteSyslog.conf
-  #@include /fluentd/etc/splunkHEC.conf
+    # Output plugins (Only use one output plugin conf file at a time. Comment or remove other files)
+    #@include /fluentd/etc/remoteSyslog.conf
+    #@include /fluentd/etc/splunkHEC.conf
 `
 
 var sourceConfigData1 = `
@@ -131,12 +131,13 @@ splunkHEC.conf: |-
     <match icp-audit icp-audit.**>
         @type splunk_hec
 `
-var splunkDefaults = `
-        hec_host SPLUNK_SERVER_HOSTNAME
-        hec_port SPLUNK_PORT
-        hec_token SPLUNK_HEC_TOKEN
-        ca_file /fluentd/etc/tls/splunkCA.pem
-        source ${tag}`
+
+// var splunkDefaults = `
+//         hec_host SPLUNK_SERVER_HOSTNAME
+//         hec_port SPLUNK_PORT
+//         hec_token SPLUNK_HEC_TOKEN
+//         ca_file /fluentd/etc/tls/splunkCA.pem
+//         source ${tag}`
 var splunkConfigData2 = `
     </match>`
 
@@ -147,22 +148,23 @@ remoteSyslog.conf: |-
         <store>
             @type remote_syslog
 `
-var qRadarDefaults = `
-            host QRADAR_SERVER_HOSTNAME
-            port QRADAR_PORT_FOR_icp-audit
-            hostname QRADAR_LOG_SOURCE_IDENTIFIER_FOR_icp-audit
-            protocol tcp
-            tls true
-            ca_file /fluentd/etc/tls/qradar.crt
-            packet_size 4096
-            program fluentd
-            <format>
-                @type single_value
-                message_key message
-            </format>
-        </store>`
+
+// var qRadarDefaults = `
+//             host QRADAR_SERVER_HOSTNAME
+//             port QRADAR_PORT_FOR_icp-audit
+//             hostname QRADAR_LOG_SOURCE_IDENTIFIER_FOR_icp-audit
+//             protocol tcp
+//             tls true
+//             ca_file /fluentd/etc/tls/qradar.crt
+//             packet_size 4096
+//             program fluentd
+//             <format>
+//                 @type single_value
+//                 message_key message
+//             </format>
+//         </store>`
 var qRadarConfigData2 = `
-	</match>`
+    </match>`
 
 // DataSplunk defines the struct for splunk-hec-config
 type DataSplunk struct {

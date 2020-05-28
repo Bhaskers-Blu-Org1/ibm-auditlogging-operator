@@ -413,6 +413,7 @@ func EqualPods(expected corev1.PodTemplateSpec, found corev1.PodTemplateSpec) bo
 		logger.Info("ServiceAccount not equal", "Found", found.Spec.ServiceAccountName, "Expected", expected.Spec.ServiceAccountName)
 		return false
 	}
+	// FIX compare null with empty
 	if !reflect.DeepEqual(found.Spec.HostAliases, expected.Spec.HostAliases) {
 		logger.Info("HostAliases not equal", "Found", found.Spec.HostAliases, "Expected", expected.Spec.HostAliases)
 		return false

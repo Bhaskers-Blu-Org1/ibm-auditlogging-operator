@@ -182,7 +182,13 @@ func (r *ReconcileAuditLogging) Reconcile(request reconcile.Request) (reconcile.
 		return recResult, recErr
 	}
 
-	// Reconcile the expected bridge deployment
+	// Reconcile the AuditPolicy CR
+	recResult, recErr = r.reconcileAuditPolicyCR(instance)
+	if recErr != nil || recResult.Requeue {
+		return recResult, recErr
+	}
+
+	// Reconcile the Policy Controller deployment
 	recResult, recErr = r.reconcilePolicyControllerDeployment(instance)
 	if recErr != nil || recResult.Requeue {
 		return recResult, recErr

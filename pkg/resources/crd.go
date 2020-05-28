@@ -17,12 +17,45 @@
 package resources
 
 import (
+	"fmt"
+
 	operatorv1alpha1 "github.com/ibm/ibm-auditlogging-operator/pkg/apis/operator/v1alpha1"
 	extv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/yaml"
 )
 
 const AuditPolicyCRDName = "auditpolicies.audit.policies.ibm.com"
+const DefaultAuditPolicyName = "audit-policy-example"
+
+var defaultAuditPolicy = []byte(`
+apiVersion: audit.policies.ibm.com/v1alpha1
+kind: AuditPolicy # Verify if audit is enabled
+metadata:
+  name: audit-policy-example
+  labels:
+    category: "System-Integrity"
+spec:
+  namespaceSelector:
+    include: []
+    exclude: []
+  clusterAuditPolicy:
+    auditPolicyRules: {}
+  remediationAction: inform # enforce or inform
+`)
+
+func BuildAuditPolicyCR() (*unstructured.Unstructured, error) {
+	obj := &unstructured.Unstructured{}
+	jsonSpec, err := yaml.YAMLToJSON(defaultAuditPolicy)
+	if err != nil {
+		return nil, fmt.Errorf("could not convert yaml to json: %v", err)
+	}
+	if err := obj.UnmarshalJSON(jsonSpec); err != nil {
+		return nil, fmt.Errorf("could not unmarshal resource: %v", err)
+	}
+	return obj, err
+}
 
 // BuildAuditPolicyCRD returns a CRD object
 func BuildAuditPolicyCRD(instance *operatorv1alpha1.AuditLogging) *extv1beta1.CustomResourceDefinition {

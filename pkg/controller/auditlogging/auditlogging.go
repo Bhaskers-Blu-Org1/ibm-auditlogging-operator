@@ -148,6 +148,31 @@ func (r *ReconcileAuditLogging) reconcileAuditPolicyCRD(instance *operatorv1alph
 	return reconcile.Result{}, nil
 }
 
+func (r *ReconcileAuditLogging) reconcileAuditPolicyCR(instance *operatorv1alpha1.AuditLogging) (reconcile.Result, error) {
+	reqLogger := log.WithValues("CR.Namespace", res.InstanceNamespace, "instance.Name", instance.Name)
+	policy, err := res.BuildAuditPolicyCR()
+	policy.SetNamespace(res.InstanceNamespace)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	// Set CommonServiceConfig instance as the owner and controller
+	if err = controllerutil.SetControllerReference(instance, policy, r.scheme); err != nil {
+		return reconcile.Result{}, err
+	}
+	err = r.client.Create(context.TODO(), policy)
+	if err != nil && errors.IsAlreadyExists(err) {
+		// Already exists
+		return reconcile.Result{}, nil
+	} else if err != nil {
+		reqLogger.Error(err, "Failed to create new CR", "CR.Name", res.DefaultAuditPolicyName)
+		return reconcile.Result{}, err
+	} else {
+		// CR created successfully - return and requeue
+		reqLogger.Info("Creating a new Audit Policy CR", "CR.Name", res.DefaultAuditPolicyName)
+		return reconcile.Result{Requeue: true}, nil
+	}
+}
+
 func (r *ReconcileAuditLogging) reconcileServiceAccount(cr *operatorv1alpha1.AuditLogging) (reconcile.Result, error) {
 	reqLogger := log.WithValues("cr.Name", cr.Name)
 	expectedRes := res.BuildServiceAccount(cr)
@@ -525,6 +550,7 @@ func (r *ReconcileAuditLogging) reconcileConfig(instance *operatorv1alpha1.Audit
 	case res.FluentdDaemonSetName + "-" + res.SplunkConfigName:
 	case res.FluentdDaemonSetName + "-" + res.QRadarConfigName:
 		// Ensure match tags are correct
+		// TODO check output configs match CR
 		if !res.EqualMatchTags(found) {
 			// Keep customer SIEM configs
 			data, err := res.BuildWithSIEMConfigs(found)

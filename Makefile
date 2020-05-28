@@ -251,6 +251,7 @@ uninstall: ## Uninstall all that all performed in the $ make install
 	- kubectl delete -f deploy/service_account.yaml -n ${NAMESPACE}
 	- kubectl delete -f deploy/role.yaml -n ${NAMESPACE}
 
+## FIX images dont use sha
 install-local: ## Install operator using local controller instead of operator deployment
 	@echo ....... Installing .......
 	@echo ....... Applying CRD and Operator .......
