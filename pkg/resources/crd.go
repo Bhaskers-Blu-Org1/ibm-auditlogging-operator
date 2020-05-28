@@ -17,18 +17,15 @@
 package resources
 
 import (
-	"fmt"
-
 	operatorv1alpha1 "github.com/ibm/ibm-auditlogging-operator/pkg/apis/operator/v1alpha1"
 	extv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/yaml"
 )
 
 const AuditPolicyCRDName = "auditpolicies.audit.policies.ibm.com"
-const DefaultAuditPolicyName = "audit-policy-example"
+const DefaultAuditPolicyName = "example-audit-policy"
 const auditPolicyGroup = "audit.policies.ibm.com"
 const auditPolicyKind = "AuditPolicy"
 const auditPolicyVersion = "v1alpha1"
@@ -37,7 +34,7 @@ var defaultAuditPolicy = []byte(`
 apiVersion: audit.policies.ibm.com/v1alpha1
 kind: AuditPolicy # Verify if audit is enabled
 metadata:
-  name: audit-policy-example
+  name: example-audit-policy
   labels:
     category: "System-Integrity"
 spec:
@@ -54,18 +51,14 @@ func BuildAuditPolicyCR() (*unstructured.Unstructured, error) {
 	obj := &unstructured.Unstructured{}
 	jsonSpec, err := yaml.YAMLToJSON(defaultAuditPolicy)
 	if err != nil {
-		return nil, fmt.Errorf("could not convert yaml to json: %v", err)
+		return nil, err
 	}
 	if err := obj.UnmarshalJSON(jsonSpec); err != nil {
-		return nil, fmt.Errorf("could not unmarshal resource: %v", err)
+		return nil, err
 	}
-	obj.SetName(DefaultAuditPolicyName)
-	obj.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   auditPolicyGroup,
-		Kind:    auditPolicyKind,
-		Version: auditPolicyVersion,
-	})
-	return obj, err
+	obj.SetNamespace(InstanceNamespace)
+	obj.SetLabels(LabelsForMetadata(AuditPolicyControllerDeploy))
+	return obj, nil
 }
 
 // BuildAuditPolicyCRD returns a CRD object
