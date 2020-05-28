@@ -23,11 +23,15 @@ import (
 	extv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/yaml"
 )
 
 const AuditPolicyCRDName = "auditpolicies.audit.policies.ibm.com"
 const DefaultAuditPolicyName = "audit-policy-example"
+const auditPolicyGroup = "audit.policies.ibm.com"
+const auditPolicyKind = "AuditPolicy"
+const auditPolicyVersion = "v1alpha1"
 
 var defaultAuditPolicy = []byte(`
 apiVersion: audit.policies.ibm.com/v1alpha1
@@ -45,6 +49,7 @@ spec:
   remediationAction: inform # enforce or inform
 `)
 
+// FIX Cr is not being cleaned up
 func BuildAuditPolicyCR() (*unstructured.Unstructured, error) {
 	obj := &unstructured.Unstructured{}
 	jsonSpec, err := yaml.YAMLToJSON(defaultAuditPolicy)
@@ -54,6 +59,12 @@ func BuildAuditPolicyCR() (*unstructured.Unstructured, error) {
 	if err := obj.UnmarshalJSON(jsonSpec); err != nil {
 		return nil, fmt.Errorf("could not unmarshal resource: %v", err)
 	}
+	obj.SetName(DefaultAuditPolicyName)
+	obj.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   auditPolicyGroup,
+		Kind:    auditPolicyKind,
+		Version: auditPolicyVersion,
+	})
 	return obj, err
 }
 
@@ -67,9 +78,9 @@ func BuildAuditPolicyCRD(instance *operatorv1alpha1.AuditLogging) *extv1beta1.Cu
 			Labels: metaLabels,
 		},
 		Spec: extv1beta1.CustomResourceDefinitionSpec{
-			Group: "audit.policies.ibm.com",
+			Group: auditPolicyGroup,
 			Names: extv1beta1.CustomResourceDefinitionNames{
-				Kind:       "AuditPolicy",
+				Kind:       auditPolicyKind,
 				Plural:     "auditpolicies",
 				ShortNames: []string{"ap"},
 			},
@@ -146,7 +157,7 @@ func BuildAuditPolicyCRD(instance *operatorv1alpha1.AuditLogging) *extv1beta1.Cu
 					},
 				},
 			},
-			Version: "v1alpha1",
+			Version: auditPolicyVersion,
 		},
 		Status: extv1beta1.CustomResourceDefinitionStatus{
 			AcceptedNames: extv1beta1.CustomResourceDefinitionNames{

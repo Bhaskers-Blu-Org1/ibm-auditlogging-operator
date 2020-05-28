@@ -18,6 +18,7 @@ package resources
 
 import (
 	"errors"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -28,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// EnableAuditLogForwardKey defines the name of the fluentd enabled key
 const EnableAuditLogForwardKey = "ENABLE_AUDIT_LOGGING_FORWARDING"
 
 var qradarPlugin = `@include /fluentd/etc/remoteSyslog.conf`
@@ -48,6 +50,7 @@ const QRadarConfigName = "remote-syslog-config"
 // SplunkConfigName defines the name of the splunk-hec-config configmap
 const SplunkConfigName = "splunk-hec-config"
 
+// FluentdConfigKey defines the key of the config configmap
 const FluentdConfigKey = "fluent.conf"
 
 // SourceConfigKey defines the key for the source-config configmap
@@ -67,7 +70,7 @@ fluent.conf: |-
     # Input plugins (Supports Systemd and HTTP)
     @include /fluentd/etc/source.conf
 
-    # Output plugins (Only use one output plugin conf file at a time.
+    # Output plugins (Only use one output plugin conf file at a time)
 `
 
 var sourceConfigData1 = `
@@ -261,46 +264,6 @@ func getConfig(data string) (string, error) {
 	return siemConfig, nil
 }
 
-func EqualSIEMConfig(instance *operatorv1alpha1.AuditLogging, found *corev1.ConfigMap) bool {
-	var key string
-	if instance.Spec.Fluentd.Output.Splunk != (operatorv1alpha1.AuditLoggingSpecSplunk{}) {
-		key = SplunkConfigKey
-		reHost := regexp.MustCompile(`hec_host .*`)
-		hostFound := reHost.FindStringSubmatch(found.Data[key])[0]
-		if hostFound != instance.Spec.Fluentd.Output.Splunk.Host {
-			return false
-		}
-		rePort := regexp.MustCompile(`hec_port .*`)
-		portFound := rePort.FindStringSubmatch(found.Data[key])[0]
-		if portFound != strconv.Itoa(instance.Spec.Fluentd.Output.Splunk.Port) {
-			return false
-		}
-		reToken := regexp.MustCompile(`hec_token .*`)
-		tokenFound := reToken.FindStringSubmatch(found.Data[key])[0]
-		if tokenFound != instance.Spec.Fluentd.Output.Splunk.Token {
-			return false
-		}
-	} else if instance.Spec.Fluentd.Output.QRadar != (operatorv1alpha1.AuditLoggingSpecQRadar{}) {
-		key = QRadarConfigKey
-		reHost := regexp.MustCompile(`host .*`)
-		hostFound := reHost.FindStringSubmatch(found.Data[key])[0]
-		if hostFound != instance.Spec.Fluentd.Output.QRadar.Host {
-			return false
-		}
-		rePort := regexp.MustCompile(`port .*`)
-		portFound := rePort.FindStringSubmatch(found.Data[key])[0]
-		if portFound != strconv.Itoa(instance.Spec.Fluentd.Output.QRadar.Port) {
-			return false
-		}
-		reToken := regexp.MustCompile(`hostname .*`)
-		hostnameFound := reToken.FindStringSubmatch(found.Data[key])[0]
-		if hostnameFound != instance.Spec.Fluentd.Output.QRadar.Hostname {
-			return false
-		}
-	}
-	return true
-}
-
 func removeK8sAudit(data string) string {
 	// K8s auditing was deprecated in CS 3.2.4 and removed in CS 3.3
 	return strings.Split(data, "<match kube-audit>")[0]
@@ -380,6 +343,47 @@ func BuildWithSIEMConfigs(found *corev1.ConfigMap) (string, error) {
 	return result, err
 }
 
+// EqualSIEMConfig returns a Boolean
+func EqualSIEMConfig(instance *operatorv1alpha1.AuditLogging, found *corev1.ConfigMap) bool {
+	var key string
+	if instance.Spec.Fluentd.Output.Splunk != (operatorv1alpha1.AuditLoggingSpecSplunk{}) {
+		key = SplunkConfigKey
+		reHost := regexp.MustCompile(`hec_host .*`)
+		hostFound := reHost.FindStringSubmatch(found.Data[key])[0]
+		if hostFound != instance.Spec.Fluentd.Output.Splunk.Host {
+			return false
+		}
+		rePort := regexp.MustCompile(`hec_port .*`)
+		portFound := rePort.FindStringSubmatch(found.Data[key])[0]
+		if portFound != strconv.Itoa(instance.Spec.Fluentd.Output.Splunk.Port) {
+			return false
+		}
+		reToken := regexp.MustCompile(`hec_token .*`)
+		tokenFound := reToken.FindStringSubmatch(found.Data[key])[0]
+		if tokenFound != instance.Spec.Fluentd.Output.Splunk.Token {
+			return false
+		}
+	} else if instance.Spec.Fluentd.Output.QRadar != (operatorv1alpha1.AuditLoggingSpecQRadar{}) {
+		key = QRadarConfigKey
+		reHost := regexp.MustCompile(`host .*`)
+		hostFound := reHost.FindStringSubmatch(found.Data[key])[0]
+		if hostFound != instance.Spec.Fluentd.Output.QRadar.Host {
+			return false
+		}
+		rePort := regexp.MustCompile(`port .*`)
+		portFound := rePort.FindStringSubmatch(found.Data[key])[0]
+		if portFound != strconv.Itoa(instance.Spec.Fluentd.Output.QRadar.Port) {
+			return false
+		}
+		reToken := regexp.MustCompile(`hostname .*`)
+		hostnameFound := reToken.FindStringSubmatch(found.Data[key])[0]
+		if hostnameFound != instance.Spec.Fluentd.Output.QRadar.Hostname {
+			return false
+		}
+	}
+	return true
+}
+
 // EqualMatchTags returns a Boolean
 func EqualMatchTags(found *corev1.ConfigMap) bool {
 	logger := log.WithValues("func", "EqualMatchTags")
@@ -398,19 +402,12 @@ func EqualMatchTags(found *corev1.ConfigMap) bool {
 	return len(match) >= 1
 }
 
-// EqualSourceConfig returns a Boolean and a String slice
-func EqualSourceConfig(expected *corev1.ConfigMap, found *corev1.ConfigMap) (bool, []string) {
-	var ports []string
-	var foundPort string
-	re := regexp.MustCompile("port [0-9]+")
-	var match = re.FindStringSubmatch(found.Data[SourceConfigKey])
-	if len(match) < 1 {
-		foundPort = ""
-	} else {
-		foundPort = strings.Split(match[0], " ")[1]
+// EqualConfig returns a Boolean
+func EqualConfig(found *corev1.ConfigMap, expected *corev1.ConfigMap, key string) bool {
+	logger := log.WithValues("func", "EqualConfig")
+	if !reflect.DeepEqual(found.Data[key], expected.Data[key]) {
+		logger.Info("Found config is incorrect", "Key", key)
+		return false
 	}
-	ports = append(ports, foundPort)
-	match = re.FindStringSubmatch(expected.Data[SourceConfigKey])
-	expectedPort := strings.Split(match[0], " ")[1]
-	return (foundPort == expectedPort), append(ports, expectedPort)
+	return true
 }
