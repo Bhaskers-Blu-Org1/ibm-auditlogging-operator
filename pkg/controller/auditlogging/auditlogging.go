@@ -541,19 +541,11 @@ func (r *ReconcileAuditLogging) reconcileConfig(instance *operatorv1alpha1.Audit
 			update = true
 		}
 	case res.FluentdDaemonSetName + "-" + res.SplunkConfigName:
-		reqLogger.Info("Reconciling output configmap")
+		reqLogger.Info("Reconciling output configmap", "ConfigMap.Name", configName)
 		fallthrough
 	case res.FluentdDaemonSetName + "-" + res.QRadarConfigName:
-		reqLogger.Info("Reconciling output configmap")
-		// Ensure match tags are correct
-		// TODO check output configs match CR
 		if !res.EqualMatchTags(found) {
-			// Keep customer SIEM configs
-			data, err := res.BuildWithSIEMConfigs(found)
-			if err != nil {
-				reqLogger.Error(err, "Failed to get SIEM configs", "Name", found.Name)
-				return reconcile.Result{}, false, err
-			}
+			data := res.UpdateMatchTags(found)
 			if configName == res.FluentdDaemonSetName+"-"+res.SplunkConfigName {
 				found.Data[res.SplunkConfigKey] = data
 			} else {
@@ -562,11 +554,7 @@ func (r *ReconcileAuditLogging) reconcileConfig(instance *operatorv1alpha1.Audit
 			update = true
 		}
 		if !res.EqualSIEMConfig(instance, found) {
-			data := res.ReplaceSIEMConfig(instance, found)
-			if err != nil {
-				reqLogger.Error(err, "Failed to replace SIEM configs", "Name", found.Name)
-				return reconcile.Result{}, false, err
-			}
+			data := res.UpdateSIEMConfig(instance, found)
 			if configName == res.FluentdDaemonSetName+"-"+res.SplunkConfigName {
 				found.Data[res.SplunkConfigKey] = data
 			} else {
@@ -641,10 +629,7 @@ func (r *ReconcileAuditLogging) reconcileFluentdDaemonSet(instance *operatorv1al
 	} else if !res.EqualDaemonSets(expected, found) {
 		// If spec is incorrect, update it and requeue
 		found.ObjectMeta.Labels = expected.ObjectMeta.Labels
-		// Keep hostAliases
-		temp := found.Spec.Template.Spec.HostAliases
 		found.Spec = expected.Spec
-		found.Spec.Template.Spec.HostAliases = temp
 		err = r.client.Update(context.TODO(), found)
 		if err != nil {
 			reqLogger.Error(err, "Failed to update Daemonset", "Namespace", res.InstanceNamespace, "Name", found.Name)
