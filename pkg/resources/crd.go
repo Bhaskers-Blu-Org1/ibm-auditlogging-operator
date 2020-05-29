@@ -26,9 +26,9 @@ import (
 
 const AuditPolicyCRDName = "auditpolicies.audit.policies.ibm.com"
 const DefaultAuditPolicyName = "example-audit-policy"
-const auditPolicyGroup = "audit.policies.ibm.com"
-const auditPolicyKind = "AuditPolicy"
-const auditPolicyVersion = "v1alpha1"
+const AuditPolicyGroup = "audit.policies.ibm.com"
+const AuditPolicyKind = "AuditPolicy"
+const AuditPolicyVersion = "v1alpha1"
 
 var defaultAuditPolicy = []byte(`
 apiVersion: audit.policies.ibm.com/v1alpha1
@@ -71,9 +71,9 @@ func BuildAuditPolicyCRD(instance *operatorv1alpha1.AuditLogging) *extv1beta1.Cu
 			Labels: metaLabels,
 		},
 		Spec: extv1beta1.CustomResourceDefinitionSpec{
-			Group: auditPolicyGroup,
+			Group: AuditPolicyGroup,
 			Names: extv1beta1.CustomResourceDefinitionNames{
-				Kind:       auditPolicyKind,
+				Kind:       AuditPolicyKind,
 				Plural:     "auditpolicies",
 				ShortNames: []string{"ap"},
 			},
@@ -150,7 +150,7 @@ func BuildAuditPolicyCRD(instance *operatorv1alpha1.AuditLogging) *extv1beta1.Cu
 					},
 				},
 			},
-			Version: auditPolicyVersion,
+			Version: AuditPolicyVersion,
 		},
 		Status: extv1beta1.CustomResourceDefinitionStatus{
 			AcceptedNames: extv1beta1.CustomResourceDefinitionNames{

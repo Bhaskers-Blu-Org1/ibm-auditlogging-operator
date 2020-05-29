@@ -28,6 +28,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	extv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -154,10 +156,6 @@ func (r *ReconcileAuditLogging) reconcileAuditPolicyCR(instance *operatorv1alpha
 	if err != nil {
 		return reconcile.Result{}, err
 	}
-	// Set CR instance as the owner and controller
-	if err = controllerutil.SetControllerReference(instance, policy, r.scheme); err != nil {
-		return reconcile.Result{}, err
-	}
 	err = r.client.Create(context.TODO(), policy)
 	if err != nil && errors.IsAlreadyExists(err) {
 		// Already exists
@@ -170,6 +168,38 @@ func (r *ReconcileAuditLogging) reconcileAuditPolicyCR(instance *operatorv1alpha
 		reqLogger.Info("Creating a new Audit Policy CR", "CR.Name", res.DefaultAuditPolicyName)
 		return reconcile.Result{Requeue: true}, nil
 	}
+}
+
+func (r *ReconcileAuditLogging) deleteExternalResources() error {
+	if err := removeCR(r.client, res.DefaultAuditPolicyName); err != nil {
+		return err
+	}
+	return nil
+}
+
+func removeCR(client client.Client, crName string) error {
+	reqLogger := log.WithValues("func", "removeCR")
+	// Get Audit Policy
+	// Using a unstructured object.
+	policy := &unstructured.Unstructured{}
+	policy.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   res.AuditPolicyGroup,
+		Kind:    res.AuditPolicyKind,
+		Version: res.AuditPolicyVersion,
+	})
+	err := client.Get(context.Background(), types.NamespacedName{Name: crName, Namespace: res.InstanceNamespace}, policy)
+	if err != nil && errors.IsNotFound(err) {
+		reqLogger.Error(err, "Error getting policy", "Name", crName)
+		return nil
+	} else if err == nil {
+		if err = client.Delete(context.Background(), policy); err != nil {
+			reqLogger.Error(err, "Error deleting policy", "Name", crName)
+			return err
+		}
+	} else {
+		return err
+	}
+	return nil
 }
 
 func (r *ReconcileAuditLogging) reconcileServiceAccount(cr *operatorv1alpha1.AuditLogging) (reconcile.Result, error) {
@@ -544,7 +574,7 @@ func (r *ReconcileAuditLogging) reconcileConfig(instance *operatorv1alpha1.Audit
 		}
 		fallthrough
 	case res.FluentdDaemonSetName + "-" + res.QRadarConfigName:
-		if instance.Spec.Fluentd.Output.Splunk != (operatorv1alpha1.AuditLoggingSpecSplunk{}) {
+		if instance.Spec.Fluentd.Output.QRadar != (operatorv1alpha1.AuditLoggingSpecQRadar{}) {
 			reqLogger.Info("Checking QRadar output configs")
 		}
 		if !res.EqualMatchTags(found) {

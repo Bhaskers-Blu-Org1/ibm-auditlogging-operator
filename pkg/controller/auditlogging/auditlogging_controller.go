@@ -110,8 +110,6 @@ type ReconcileAuditLogging struct {
 
 // Reconcile reads that state of the cluster for a AuditLogging object and makes changes based on the state read
 // and what is in the AuditLogging.Spec
-// TODO(user): Modify this Reconcile function to implement your Controller logic.  This example creates
-// a Pod as an example
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
@@ -141,6 +139,35 @@ func (r *ReconcileAuditLogging) Reconcile(request reconcile.Request) (reconcile.
 			reqLogger.Error(err, "Failed to set AuditLogging default status")
 			return reconcile.Result{}, err
 		}
+	}
+
+	// Credit: kubebuilder book
+	finalizerName := "auditlogging.operator.ibm.com"
+	// Determine if the AuditLogging CR is going to be deleted
+	if instance.ObjectMeta.DeletionTimestamp.IsZero() {
+		// Object not being deleted, but add our finalizer so we know to remove this object later when it is going to be deleted
+		if !res.ContainsString(instance.ObjectMeta.Finalizers, finalizerName) {
+			instance.ObjectMeta.Finalizers = append(instance.ObjectMeta.Finalizers, finalizerName)
+			if err := r.client.Update(context.Background(), instance); err != nil {
+				reqLogger.Error(err, "Error adding the finalizer to the CR")
+				return reconcile.Result{}, err
+			}
+		}
+	} else {
+		// Object scheduled to be deleted
+		if res.ContainsString(instance.ObjectMeta.Finalizers, finalizerName) {
+			if err := r.deleteExternalResources(); err != nil {
+				reqLogger.Error(err, "Error deleting resources created by this operator")
+				return reconcile.Result{}, err
+			}
+			instance.ObjectMeta.Finalizers = res.RemoveString(instance.ObjectMeta.Finalizers, finalizerName)
+			if err := r.client.Update(context.Background(), instance); err != nil {
+				reqLogger.Error(err, "Error updating the CR to remove the finalizer")
+				return reconcile.Result{}, err
+			}
+			reqLogger.Info("Successfully deleted external resources")
+		}
+		return reconcile.Result{}, nil
 	}
 
 	var recResult reconcile.Result

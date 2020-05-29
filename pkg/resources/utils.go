@@ -140,3 +140,24 @@ func annotationsForMetering(deploymentName string) map[string]string {
 	}
 	return annotations
 }
+
+// ContainsString returns a Boolean
+func ContainsString(slice []string, s string) bool {
+	for _, item := range slice {
+		if item == s {
+			return true
+		}
+	}
+	return false
+}
+
+//RemoveString returns a Boolean
+func RemoveString(slice []string, s string) (result []string) {
+	for _, item := range slice {
+		if item == s {
+			continue
+		}
+		result = append(result, item)
+	}
+	return
+}
