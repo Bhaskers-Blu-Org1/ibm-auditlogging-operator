@@ -121,8 +121,9 @@ func (r *ReconcileAuditLogging) reconcileService(instance *operatorv1alpha1.Audi
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileAuditLogging) reconcileAuditPolicyCRD(instance *operatorv1alpha1.AuditLogging) (reconcile.Result, error) {
-	reqLogger := log.WithValues("CRD.Namespace", res.InstanceNamespace, "instance.Name", instance.Name)
+func (r *ReconcileAuditLogging) reconcileAuditPolicyResources(instance *operatorv1alpha1.AuditLogging) (reconcile.Result, error) {
+	var reqLogger = log.WithValues("instance.Name", instance.Name)
+	var requeue = false
 	expected := res.BuildAuditPolicyCRD(instance)
 	found := &extv1beta1.CustomResourceDefinition{}
 	err := r.client.Get(context.TODO(), types.NamespacedName{Name: expected.Name}, found)
@@ -131,43 +132,48 @@ func (r *ReconcileAuditLogging) reconcileAuditPolicyCRD(instance *operatorv1alph
 		if err := controllerutil.SetControllerReference(instance, expected, r.scheme); err != nil {
 			return reconcile.Result{}, err
 		}
-		reqLogger.Info("Creating a new Audit Policy CRD", "CRD.Namespace", expected.Namespace, "CRD.Name", expected.Name)
+		reqLogger.Info("Creating a new Audit Policy CRD", "CRD.Name", expected.Name)
 		err = r.client.Create(context.TODO(), expected)
-		if err != nil && errors.IsAlreadyExists(err) {
-			// Already exists from previous reconcile, requeue.
-			return reconcile.Result{Requeue: true}, nil
-		} else if err != nil {
-			reqLogger.Error(err, "Failed to create new CRD", "CRD.Namespace", expected.Namespace,
+		if err != nil && !errors.IsAlreadyExists(err) {
+			reqLogger.Error(err, "Failed to create new CRD", expected.Namespace,
 				"CRD.Name", expected.Name)
 			return reconcile.Result{}, err
 		}
 		// CRD created successfully - return and requeue
-		return reconcile.Result{Requeue: true}, nil
+		requeue = true
 	} else if err != nil {
 		reqLogger.Error(err, "Failed to get CRD")
 		return reconcile.Result{}, err
 	}
-	return reconcile.Result{}, nil
-}
-
-func (r *ReconcileAuditLogging) reconcileAuditPolicyCR(instance *operatorv1alpha1.AuditLogging) (reconcile.Result, error) {
-	reqLogger := log.WithValues("CR.Namespace", res.InstanceNamespace, "instance.Name", instance.Name)
-	policy, err := res.BuildAuditPolicyCR()
-	if err != nil {
+	reqLogger = log.WithValues("CR.Namespace", res.InstanceNamespace, "instance.Name", instance.Name)
+	foundPolicy := &unstructured.Unstructured{}
+	foundPolicy.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   res.AuditPolicyGroup,
+		Kind:    res.AuditPolicyKind,
+		Version: res.AuditPolicyVersion,
+	})
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: res.DefaultAuditPolicyName, Namespace: res.InstanceNamespace}, foundPolicy)
+	if err != nil && errors.IsNotFound(err) {
+		policy, err := res.BuildAuditPolicyCR()
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		reqLogger.Info("Creating a new Audit Policy CR", "CR.Name", res.DefaultAuditPolicyName)
+		err = r.client.Create(context.TODO(), policy)
+		if err != nil && !errors.IsAlreadyExists(err) {
+			reqLogger.Error(err, "Failed to create new CR", "CR.Name", res.DefaultAuditPolicyName)
+			return reconcile.Result{}, err
+		}
+		// CR created successfully - return and requeue
+		requeue = true
+	} else if err != nil {
+		reqLogger.Error(err, "Failed to get CR")
 		return reconcile.Result{}, err
 	}
-	err = r.client.Create(context.TODO(), policy)
-	if err != nil && errors.IsAlreadyExists(err) {
-		// Already exists
-		return reconcile.Result{}, nil
-	} else if err != nil {
-		reqLogger.Error(err, "Failed to create new CR", "CR.Name", res.DefaultAuditPolicyName)
-		return reconcile.Result{}, err
-	} else {
-		// CR created successfully - return and requeue
-		reqLogger.Info("Creating a new Audit Policy CR", "CR.Name", res.DefaultAuditPolicyName)
+	if requeue {
 		return reconcile.Result{Requeue: true}, nil
 	}
+	return reconcile.Result{}, nil
 }
 
 func (r *ReconcileAuditLogging) deleteExternalResources() error {
@@ -534,7 +540,7 @@ func (r *ReconcileAuditLogging) reconcileConfig(instance *operatorv1alpha1.Audit
 		err = r.client.Create(context.TODO(), expected)
 		if err != nil && errors.IsAlreadyExists(err) {
 			// Already exists from previous reconcile, requeue.
-			return reconcile.Result{Requeue: true}, err
+			return reconcile.Result{Requeue: true}, nil
 		} else if err != nil {
 			reqLogger.Error(err, "Failed to create new ConfigMap", "ConfigMap.Namespace", expected.Namespace,
 				"ConfigMap.Name", expected.Name)

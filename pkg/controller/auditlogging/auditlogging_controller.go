@@ -131,45 +131,6 @@ func (r *ReconcileAuditLogging) Reconcile(request reconcile.Request) (reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// Set a default Status value
-	if len(instance.Status.Nodes) == 0 {
-		instance.Status.Nodes = res.DefaultStatusForCR
-		err = r.client.Status().Update(context.TODO(), instance)
-		if err != nil {
-			reqLogger.Error(err, "Failed to set AuditLogging default status")
-			return reconcile.Result{}, err
-		}
-	}
-
-	// Credit: kubebuilder book
-	finalizerName := "auditlogging.operator.ibm.com"
-	// Determine if the AuditLogging CR is going to be deleted
-	if instance.ObjectMeta.DeletionTimestamp.IsZero() {
-		// Object not being deleted, but add our finalizer so we know to remove this object later when it is going to be deleted
-		if !res.ContainsString(instance.ObjectMeta.Finalizers, finalizerName) {
-			instance.ObjectMeta.Finalizers = append(instance.ObjectMeta.Finalizers, finalizerName)
-			if err := r.client.Update(context.Background(), instance); err != nil {
-				reqLogger.Error(err, "Error adding the finalizer to the CR")
-				return reconcile.Result{}, err
-			}
-		}
-	} else {
-		// Object scheduled to be deleted
-		if res.ContainsString(instance.ObjectMeta.Finalizers, finalizerName) {
-			if err := r.deleteExternalResources(); err != nil {
-				reqLogger.Error(err, "Error deleting resources created by this operator")
-				return reconcile.Result{}, err
-			}
-			instance.ObjectMeta.Finalizers = res.RemoveString(instance.ObjectMeta.Finalizers, finalizerName)
-			if err := r.client.Update(context.Background(), instance); err != nil {
-				reqLogger.Error(err, "Error updating the CR to remove the finalizer")
-				return reconcile.Result{}, err
-			}
-			reqLogger.Info("Successfully deleted external resources")
-		}
-		return reconcile.Result{}, nil
-	}
-
 	var recResult reconcile.Result
 	var recErr error
 
@@ -204,13 +165,7 @@ func (r *ReconcileAuditLogging) Reconcile(request reconcile.Request) (reconcile.
 	}
 
 	// Reconcile the AuditPolicy CRD
-	recResult, recErr = r.reconcileAuditPolicyCRD(instance)
-	if recErr != nil || recResult.Requeue {
-		return recResult, recErr
-	}
-
-	// Reconcile the AuditPolicy CR
-	recResult, recErr = r.reconcileAuditPolicyCR(instance)
+	recResult, recErr = r.reconcileAuditPolicyResources(instance)
 	if recErr != nil || recResult.Requeue {
 		return recResult, recErr
 	}
@@ -255,9 +210,47 @@ func (r *ReconcileAuditLogging) Reconcile(request reconcile.Request) (reconcile.
 		return recResult, recErr
 	}
 
+	recResult, recErr = r.checkIfBeingDeleted(instance)
+	if recErr != nil || recResult.Requeue {
+		return recResult, recErr
+	}
+
 	reqLogger.Info("Reconciliation successful!", "Name", instance.Name)
 	// since we updated the status in the Audit Logging CR, sleep 5 seconds to allow the CR to be refreshed.
 	time.Sleep(5 * time.Second)
 
+	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileAuditLogging) checkIfBeingDeleted(instance *operatorv1alpha1.AuditLogging) (reconcile.Result, error) {
+	reqLogger := log.WithValues("func", "checkIfBeingDeleted")
+	// Credit: kubebuilder book
+	finalizerName := "auditlogging.operator.ibm.com"
+	// Determine if the AuditLogging CR is going to be deleted
+	if instance.ObjectMeta.DeletionTimestamp.IsZero() {
+		// Object not being deleted, but add our finalizer so we know to remove this object later when it is going to be deleted
+		if !res.ContainsString(instance.ObjectMeta.Finalizers, finalizerName) {
+			instance.ObjectMeta.Finalizers = append(instance.ObjectMeta.Finalizers, finalizerName)
+			if err := r.client.Update(context.Background(), instance); err != nil {
+				reqLogger.Error(err, "Error adding the finalizer to the CR")
+				return reconcile.Result{}, err
+			}
+		}
+	} else {
+		// Object scheduled to be deleted
+		if res.ContainsString(instance.ObjectMeta.Finalizers, finalizerName) {
+			if err := r.deleteExternalResources(); err != nil {
+				reqLogger.Error(err, "Error deleting resources created by this operator")
+				return reconcile.Result{}, err
+			}
+			instance.ObjectMeta.Finalizers = res.RemoveString(instance.ObjectMeta.Finalizers, finalizerName)
+			if err := r.client.Update(context.Background(), instance); err != nil {
+				reqLogger.Error(err, "Error updating the CR to remove the finalizer")
+				return reconcile.Result{}, err
+			}
+			reqLogger.Info("Successfully deleted external resources")
+		}
+		return reconcile.Result{}, nil
+	}
 	return reconcile.Result{}, nil
 }

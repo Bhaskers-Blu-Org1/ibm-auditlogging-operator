@@ -25,7 +25,7 @@ import (
 )
 
 const AuditPolicyCRDName = "auditpolicies.audit.policies.ibm.com"
-const DefaultAuditPolicyName = "example-audit-policy"
+const DefaultAuditPolicyName = "example-auditpolicy"
 const AuditPolicyGroup = "audit.policies.ibm.com"
 const AuditPolicyKind = "AuditPolicy"
 const AuditPolicyVersion = "v1alpha1"
@@ -46,7 +46,6 @@ spec:
   remediationAction: inform # enforce or inform
 `)
 
-// FIX Cr is not being cleaned up
 func BuildAuditPolicyCR() (*unstructured.Unstructured, error) {
 	obj := &unstructured.Unstructured{}
 	jsonSpec, err := yaml.YAMLToJSON(defaultAuditPolicy)
@@ -56,6 +55,7 @@ func BuildAuditPolicyCR() (*unstructured.Unstructured, error) {
 	if err := obj.UnmarshalJSON(jsonSpec); err != nil {
 		return nil, err
 	}
+	obj.SetName(DefaultAuditPolicyName)
 	obj.SetNamespace(InstanceNamespace)
 	obj.SetLabels(LabelsForMetadata(AuditPolicyControllerDeploy))
 	return obj, nil
