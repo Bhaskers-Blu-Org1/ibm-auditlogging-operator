@@ -147,17 +147,9 @@ func (r *ReconcileAuditLogging) Reconcile(request reconcile.Request) (reconcile.
 	var recErr error
 
 	// Reconcile the expected configmaps
-	recResult, restartFluentdPods, recErr := r.reconcileAuditConfigMaps(instance)
+	recResult, recErr = r.reconcileAuditConfigMaps(instance)
 	if recErr != nil || recResult.Requeue {
 		return recResult, recErr
-	}
-
-	// FIX method is not hit after cm update
-	if restartFluentdPods {
-		recResult, recErr = r.restartFluentdPods(instance)
-		if recErr != nil || recResult.Requeue {
-			return recResult, recErr
-		}
 	}
 
 	// Reconcile the expected cert

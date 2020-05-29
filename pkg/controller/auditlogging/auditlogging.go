@@ -463,60 +463,58 @@ func (r *ReconcileAuditLogging) reconcilePolicyControllerDeployment(instance *op
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileAuditLogging) reconcileAuditConfigMaps(instance *operatorv1alpha1.AuditLogging) (reconcile.Result, bool, error) {
+func (r *ReconcileAuditLogging) reconcileAuditConfigMaps(instance *operatorv1alpha1.AuditLogging) (reconcile.Result, error) {
 	var recResult reconcile.Result
 	var recErr error
-	var updated bool
-	recResult, updated, recErr = r.reconcileConfig(instance, res.FluentdDaemonSetName+"-"+res.ConfigName)
+	recResult, recErr = r.reconcileConfig(instance, res.FluentdDaemonSetName+"-"+res.ConfigName)
 	if recErr != nil || recResult.Requeue {
-		return recResult, updated, recErr
+		return recResult, recErr
 	}
-	// FIX
-	recResult, updated, recErr = r.reconcileConfig(instance, res.FluentdDaemonSetName+"-"+res.SourceConfigName)
+	recResult, recErr = r.reconcileConfig(instance, res.FluentdDaemonSetName+"-"+res.SourceConfigName)
 	if recErr != nil || recResult.Requeue {
-		return recResult, updated, recErr
+		return recResult, recErr
 	}
-	recResult, updated, recErr = r.reconcileConfig(instance, res.FluentdDaemonSetName+"-"+res.SplunkConfigName)
+	recResult, recErr = r.reconcileConfig(instance, res.FluentdDaemonSetName+"-"+res.SplunkConfigName)
 	if recErr != nil || recResult.Requeue {
-		return recResult, updated, recErr
+		return recResult, recErr
 	}
-	recResult, updated, recErr = r.reconcileConfig(instance, res.FluentdDaemonSetName+"-"+res.QRadarConfigName)
+	recResult, recErr = r.reconcileConfig(instance, res.FluentdDaemonSetName+"-"+res.QRadarConfigName)
 	if recErr != nil || recResult.Requeue {
-		return recResult, updated, recErr
+		return recResult, recErr
 	}
-	return reconcile.Result{}, updated, nil
+	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileAuditLogging) reconcileConfig(instance *operatorv1alpha1.AuditLogging, configName string) (reconcile.Result, bool, error) {
+func (r *ReconcileAuditLogging) reconcileConfig(instance *operatorv1alpha1.AuditLogging, configName string) (reconcile.Result, error) {
 	reqLogger := log.WithValues("ConfigMap.Namespace", res.InstanceNamespace, "instance.Name", instance.Name)
 	expected, err := res.BuildConfigMap(instance, configName)
 
 	if err != nil {
 		reqLogger.Error(err, "Failed to create ConfigMap")
-		return reconcile.Result{}, false, err
+		return reconcile.Result{}, err
 	}
 	found := &corev1.ConfigMap{}
 	err = r.client.Get(context.TODO(), types.NamespacedName{Name: configName, Namespace: res.InstanceNamespace}, found)
 	if err != nil && errors.IsNotFound(err) {
 		// Define a new ConfigMap
 		if err := controllerutil.SetControllerReference(instance, expected, r.scheme); err != nil {
-			return reconcile.Result{}, false, err
+			return reconcile.Result{}, err
 		}
 		reqLogger.Info("Creating a new ConfigMap", "ConfigMap.Namespace", expected.Namespace, "ConfigMap.Name", expected.Name)
 		err = r.client.Create(context.TODO(), expected)
 		if err != nil && errors.IsAlreadyExists(err) {
 			// Already exists from previous reconcile, requeue.
-			return reconcile.Result{Requeue: true}, false, err
+			return reconcile.Result{Requeue: true}, err
 		} else if err != nil {
 			reqLogger.Error(err, "Failed to create new ConfigMap", "ConfigMap.Namespace", expected.Namespace,
 				"ConfigMap.Name", expected.Name)
-			return reconcile.Result{}, false, err
+			return reconcile.Result{}, err
 		}
 		// ConfigMap created successfully - return and requeue
-		return reconcile.Result{Requeue: true}, false, nil
+		return reconcile.Result{Requeue: true}, nil
 	} else if err != nil {
 		reqLogger.Error(err, "Failed to get ConfigMap")
-		return reconcile.Result{}, false, err
+		return reconcile.Result{}, err
 	}
 	// ConfigMap was found, check for expected values
 	var update = false
@@ -541,9 +539,14 @@ func (r *ReconcileAuditLogging) reconcileConfig(instance *operatorv1alpha1.Audit
 			update = true
 		}
 	case res.FluentdDaemonSetName + "-" + res.SplunkConfigName:
-		reqLogger.Info("Reconciling output configmap", "ConfigMap.Name", configName)
+		if instance.Spec.Fluentd.Output.Splunk != (operatorv1alpha1.AuditLoggingSpecSplunk{}) {
+			reqLogger.Info("Checking Splunk output configs")
+		}
 		fallthrough
 	case res.FluentdDaemonSetName + "-" + res.QRadarConfigName:
+		if instance.Spec.Fluentd.Output.Splunk != (operatorv1alpha1.AuditLoggingSpecSplunk{}) {
+			reqLogger.Info("Checking QRadar output configs")
+		}
 		if !res.EqualMatchTags(found) {
 			data := res.UpdateMatchTags(found)
 			if configName == res.FluentdDaemonSetName+"-"+res.SplunkConfigName {
@@ -569,16 +572,20 @@ func (r *ReconcileAuditLogging) reconcileConfig(instance *operatorv1alpha1.Audit
 		err = r.client.Update(context.TODO(), found)
 		if err != nil {
 			reqLogger.Error(err, "Failed to update ConfigMap", "Name", found.Name)
-			return reconcile.Result{}, false, err
+			return reconcile.Result{}, err
 		}
 		// Updated - return and requeue
 		reqLogger.Info("Updating ConfigMap", "ConfigMap.Name", found.Name)
-		return reconcile.Result{Requeue: true}, true, nil
+		err = restartFluentdPods(r, instance)
+		if err != nil {
+			reqLogger.Error(err, "Failed to restart fluentd pods")
+		}
+		return reconcile.Result{Requeue: true}, nil
 	}
-	return reconcile.Result{}, false, nil
+	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileAuditLogging) restartFluentdPods(instance *operatorv1alpha1.AuditLogging) (reconcile.Result, error) {
+func restartFluentdPods(r *ReconcileAuditLogging, instance *operatorv1alpha1.AuditLogging) error {
 	reqLogger := log.WithValues("func", "restartFluentdPods")
 	podList := &corev1.PodList{}
 	listOpts := []client.ListOption{
@@ -587,18 +594,18 @@ func (r *ReconcileAuditLogging) restartFluentdPods(instance *operatorv1alpha1.Au
 	}
 	if err := r.client.List(context.TODO(), podList, listOpts...); err != nil {
 		reqLogger.Error(err, "Failed to list pods")
-		return reconcile.Result{}, err
+		return err
 	}
 	for _, pod := range podList.Items {
 		p := pod
 		err := r.client.Delete(context.TODO(), &p)
 		if err != nil {
 			reqLogger.Error(err, "Failed to delete pod", "Pod.Name", pod.Name)
-			return reconcile.Result{}, err
+			return err
 		}
 	}
 	reqLogger.Info("Restarted pods", "Pods", res.GetPodNames(podList.Items))
-	return reconcile.Result{}, nil
+	return nil
 }
 
 func (r *ReconcileAuditLogging) reconcileFluentdDaemonSet(instance *operatorv1alpha1.AuditLogging) (reconcile.Result, error) {
