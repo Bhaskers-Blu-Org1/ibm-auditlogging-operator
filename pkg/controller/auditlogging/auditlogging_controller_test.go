@@ -24,6 +24,8 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
+	"strings"
 	"testing"
 
 	operatorv1alpha1 "github.com/ibm/ibm-auditlogging-operator/pkg/apis/operator/v1alpha1"
@@ -43,18 +45,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-const journalPath = "/var/log/audit"
-const verbosity = "10"
+const dummyJournalPath = "/var/log/audit"
+const dummyVerbosity = "10"
 const numPods = 4
-const dummyHost = "hec_host master"
-const dummyPort = "hec_port 8088"
-const dummyToken = "hec_token abc-123"
+const dummyHost = "master1"
+const dummyPort = 8088
+const dummyToken = "abc-1234"
 const dummySplunkConfig = `
 splunkHEC.conf: |-
      <match icp-audit k8s-audit>
         @type splunk_hec
         hec_host master
-        hec_port 8088
+        hec_port 8089
         hec_token abc-123
         ca_file /fluentd/etc/tls/splunkCA.pem
         source ${tag}
@@ -64,18 +66,14 @@ splunkHEC.conf: |-
      </match>`
 const dummyFluentdSHA = "sha256:abc"
 const dummyPolicyControllerTag = "3.4.0"
-
-var dummyHostAliases = []corev1.HostAlias{
-	{
-		IP:        "9.12.34.56",
-		Hostnames: []string{"test.fyre.ibm.com"},
-	},
-}
+const dummyHostIP = "9.12.34.56"
+const dummyHostname = "test.fyre.ibm.com"
 
 // TestConfigConfig runs ReconcileOperandConfig.Reconcile() against a
 // fake client that tracks a OperandConfig object.
 func TestAuditLoggingController(t *testing.T) {
 	// USE THIS
+	// logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	// logf.SetLogger(logf.ZapLogger(true))
 	var (
 		name = "example-auditlogging"
@@ -92,7 +90,7 @@ func TestAuditLoggingController(t *testing.T) {
 	checkMountAndRBACPreReqs(t, r, req)
 	checkPolicyControllerConfig(t, r, req)
 	checkFluentdConfig(t, r, req, cr)
-	checkInPlaceUpdate(t, r, req)
+	checkSIEMConfig(t, r, req)
 }
 
 // Init reconcile the AuditLogging CR
@@ -179,11 +177,13 @@ func checkPolicyControllerConfig(t *testing.T, r ReconcileAuditLogging, req reco
 	assert.NoError(err)
 
 	// Check if Policy Controller Deployment has been created
-	pc := getAuditPolicyController(t, r, req)
+	pc := getAuditPolicyController(t, r)
 	image := res.DefaultImageRegistry + res.DefaultPCImageName + ":" + dummyPolicyControllerTag
 	if pc.Spec.Template.Spec.Containers[0].Image != image {
 		t.Fatalf("Incorrect policy controller image. Found: (%s), Expected: (%s)", pc.Spec.Template.Spec.Containers[0].Image, image)
 	}
+	_, err = r.Reconcile(req)
+	assert.NoError(err)
 }
 
 func checkFluentdConfig(t *testing.T, r ReconcileAuditLogging, req reconcile.Request, cr *operatorv1alpha1.AuditLogging) {
@@ -217,7 +217,7 @@ func checkFluentdConfig(t *testing.T, r ReconcileAuditLogging, req reconcile.Req
 	assert.NoError(err)
 
 	// Check if fluentd DaemonSet is created
-	ds := getFluentd(t, r, req)
+	ds := getFluentd(t, r)
 	image := res.DefaultImageRegistry + res.DefaultFluentdImageName + "@" + dummyFluentdSHA
 	if ds.Spec.Template.Spec.Containers[0].Image != image {
 		t.Fatalf("Incorrect fluentd image. Found: (%s), Expected: (%s)", ds.Spec.Template.Spec.Containers[0].Image, image)
@@ -282,8 +282,7 @@ func checkFluentdConfig(t *testing.T, r ReconcileAuditLogging, req reconcile.Req
 
 func updateAuditLoggingCR(al *operatorv1alpha1.AuditLogging, t *testing.T, r ReconcileAuditLogging, req reconcile.Request) {
 	assert := assert.New(t)
-	al.Spec.Fluentd.JournalPath = journalPath
-	al.Spec.PolicyController.Verbosity = verbosity
+	al.Spec.Fluentd.JournalPath = dummyJournalPath
 	err := r.client.Update(context.TODO(), al)
 	if err != nil {
 		t.Fatalf("Failed to update CR: (%v)", err)
@@ -294,37 +293,81 @@ func updateAuditLoggingCR(al *operatorv1alpha1.AuditLogging, t *testing.T, r Rec
 		t.Error("reconcile did not requeue request as expected")
 	}
 	assert.NoError(err)
+
+	al.Spec.PolicyController.Verbosity = dummyVerbosity
+	err = r.client.Update(context.TODO(), al)
+	if err != nil {
+		t.Fatalf("Failed to update CR: (%v)", err)
+	}
+	// update resources
+	result, err = r.Reconcile(req)
+	if !result.Requeue {
+		t.Error("reconcile did not requeue request as expected")
+	}
+	assert.NoError(err)
 }
 
 func checkAuditLogging(t *testing.T, r ReconcileAuditLogging, req reconcile.Request) {
-	policyController := getAuditPolicyController(t, r, req)
-	fluentd := getFluentd(t, r, req)
+	assert := assert.New(t)
+	var err error
+
+	policyController := getAuditPolicyController(t, r)
+	_, err = r.Reconcile(req)
+	assert.NoError(err)
+	fluentd := getFluentd(t, r)
+	_, err = r.Reconcile(req)
+	assert.NoError(err)
 	var found = false
 	for _, arg := range policyController.Spec.Template.Spec.Containers[0].Args {
-		if arg == "--v="+verbosity {
+		if arg == "--v="+dummyVerbosity {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatalf("Policy controller not updated with verbosity: (%s)", verbosity)
+		t.Fatalf("Policy controller not updated with verbosity: (%s)", dummyVerbosity)
 	}
 	found = false
 	for _, v := range fluentd.Spec.Template.Spec.Containers[0].VolumeMounts {
-		if v.MountPath == journalPath {
+		if v.MountPath == dummyJournalPath {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatalf("Fluentd ds not updated with journal path: (%s)", journalPath)
+		t.Fatalf("Fluentd ds not updated with journal path: (%s)", dummyJournalPath)
+	}
+	foundCM := &corev1.ConfigMap{}
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: res.FluentdDaemonSetName + "-" +
+		res.SourceConfigName, Namespace: res.InstanceNamespace}, foundCM)
+	if err != nil {
+		t.Fatalf("get configmap: (%v)", err)
+	}
+	if strings.Contains(foundCM.Data[res.SplunkConfigKey], dummyJournalPath) {
+		t.Fatalf("Source config not updated with journal path: (%s)", dummyJournalPath)
 	}
 }
 
-func checkInPlaceUpdate(t *testing.T, r ReconcileAuditLogging, req reconcile.Request) {
+func checkSIEMConfig(t *testing.T, r ReconcileAuditLogging, req reconcile.Request) {
 	var err error
 	var emptyLabels map[string]string
+	var al *operatorv1alpha1.AuditLogging
 	assert := assert.New(t)
+
+	al = getAuditLogging(t, r, req)
+	al.Spec.Fluentd.Output.Splunk.Host = dummyHost
+	al.Spec.Fluentd.Output.Splunk.Port = dummyPort
+	al.Spec.Fluentd.Output.Splunk.Token = dummyToken
+
+	if err = r.client.Update(context.TODO(), al); err != nil {
+		t.Fatalf("Failed to update instance: (%v)", err)
+	}
+
+	result, err := r.Reconcile(req)
+	if !result.Requeue {
+		t.Error("reconcile did not requeue request as expected")
+	}
+	assert.NoError(err)
 
 	foundCM := &corev1.ConfigMap{}
 	err = r.client.Get(context.TODO(), types.NamespacedName{Name: res.FluentdDaemonSetName + "-" +
@@ -332,17 +375,17 @@ func checkInPlaceUpdate(t *testing.T, r ReconcileAuditLogging, req reconcile.Req
 	if err != nil {
 		t.Fatalf("get configmap: (%v)", err)
 	}
+	foundCM.ObjectMeta.Labels = emptyLabels
 	var ds res.DataSplunk
 	err = yaml.Unmarshal([]byte(dummySplunkConfig), &ds)
 	assert.NoError(err)
 	foundCM.Data[res.SplunkConfigKey] = ds.Value
-	foundCM.ObjectMeta.Labels = emptyLabels
 	err = r.client.Update(context.TODO(), foundCM)
 	if err != nil {
 		t.Fatalf("Failed to update CR: (%v)", err)
 	}
 	// update splunk configmap
-	result, err := r.Reconcile(req)
+	result, err = r.Reconcile(req)
 	if !result.Requeue {
 		t.Error("reconcile did not requeue request as expected")
 	}
@@ -362,8 +405,8 @@ func checkInPlaceUpdate(t *testing.T, r ReconcileAuditLogging, req reconcile.Req
 	token := reToken.FindStringSubmatch(updatedCM.Data[res.SplunkConfigKey])[0]
 	reBuffer := regexp.MustCompile(`buffer`)
 	buffer := reBuffer.FindAllString(updatedCM.Data[res.SplunkConfigKey], -1)
-	if host != dummyHost || port != dummyPort || token != dummyToken {
-		t.Fatalf("SIEM creds not preserved: found host = (%s), found port = (%s), found token = (%s)", host, port, token)
+	if host != `hec_host `+dummyHost || port != `hec_port `+strconv.Itoa(dummyPort) || token != `hec_token `+dummyToken {
+		t.Fatalf("SIEM creds not configured: found host = (%s), found port = (%s), found token = (%s)", host, port, token)
 	}
 	if !reflect.DeepEqual(updatedCM.ObjectMeta.Labels, res.LabelsForMetadata(res.FluentdName)) {
 		t.Fatalf("Labels not correct")
@@ -373,55 +416,51 @@ func checkInPlaceUpdate(t *testing.T, r ReconcileAuditLogging, req reconcile.Req
 	}
 
 	// add hostaliases
-	fluentd := getFluentd(t, r, req)
-	fluentd.Spec.Template.Spec.HostAliases = dummyHostAliases
-	// trigger found != expected
-	fluentd.ObjectMeta.Labels = map[string]string{}
-	err = r.client.Update(context.TODO(), fluentd)
-	if err != nil {
-		t.Fatalf("Failed to update fluentd daemonset: (%v)", err)
+	al = getAuditLogging(t, r, req)
+	al.Spec.Fluentd.Output.HostAlias.HostIP = dummyHostIP
+	al.Spec.Fluentd.Output.HostAlias.Hostname = dummyHostname
+
+	if err = r.client.Update(context.TODO(), al); err != nil {
+		t.Fatalf("Failed to update instance: (%v)", err)
 	}
-	_, err = r.Reconcile(req)
+
+	result, err = r.Reconcile(req)
+	if !result.Requeue {
+		t.Error("reconcile did not requeue request as expected")
+	}
 	assert.NoError(err)
 
-	fluentd = getFluentd(t, r, req)
-	if !reflect.DeepEqual(fluentd.Spec.Template.Spec.HostAliases, dummyHostAliases) {
-		t.Fatalf("HostAliases not saved. Found: (%v). Expected: (%v)", fluentd.Spec.Template.Spec.HostAliases, dummyHostAliases)
+	fluentd := getFluentd(t, r)
+	if len(fluentd.Spec.Template.Spec.HostAliases) == 0 || !reflect.DeepEqual(fluentd.Spec.Template.Spec.HostAliases[0].IP, dummyHostIP) ||
+		!reflect.DeepEqual(fluentd.Spec.Template.Spec.HostAliases[0].Hostnames[0], dummyHostname) {
+		t.Fatalf("HostAliases not saved. Found: (%v). Expected: HostIP (%v), Hostname (%v)", fluentd.Spec.Template.Spec.HostAliases, dummyHostIP, dummyHostname)
 	}
 }
 
 func getAuditLogging(t *testing.T, r ReconcileAuditLogging, req reconcile.Request) *operatorv1alpha1.AuditLogging {
-	assert := assert.New(t)
 	al := &operatorv1alpha1.AuditLogging{}
 	err := r.client.Get(context.TODO(), req.NamespacedName, al)
 	if err != nil {
 		t.Fatalf("get auditlogging: (%v)", err)
 	}
-	assert.NoError(err)
 	return al
 }
 
-func getAuditPolicyController(t *testing.T, r ReconcileAuditLogging, req reconcile.Request) *appsv1.Deployment {
-	assert := assert.New(t)
+func getAuditPolicyController(t *testing.T, r ReconcileAuditLogging) *appsv1.Deployment {
 	foundDep := &appsv1.Deployment{}
 	err := r.client.Get(context.TODO(), types.NamespacedName{Name: res.AuditPolicyControllerDeploy, Namespace: res.InstanceNamespace}, foundDep)
 	if err != nil {
 		t.Fatalf("get deployment: (%v)", err)
 	}
-	_, err = r.Reconcile(req)
-	assert.NoError(err)
 	return foundDep
 }
 
-func getFluentd(t *testing.T, r ReconcileAuditLogging, req reconcile.Request) *appsv1.DaemonSet {
-	assert := assert.New(t)
+func getFluentd(t *testing.T, r ReconcileAuditLogging) *appsv1.DaemonSet {
 	foundDS := &appsv1.DaemonSet{}
 	err := r.client.Get(context.TODO(), types.NamespacedName{Name: res.FluentdDaemonSetName, Namespace: res.InstanceNamespace}, foundDS)
 	if err != nil {
 		t.Fatalf("get daemonset: (%v)", err)
 	}
-	_, err = r.Reconcile(req)
-	assert.NoError(err)
 	return foundDS
 }
 

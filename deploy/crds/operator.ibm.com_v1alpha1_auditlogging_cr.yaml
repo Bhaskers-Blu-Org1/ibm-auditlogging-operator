@@ -13,14 +13,6 @@ spec:
     pullPolicy: IfNotPresent
     journalPath: /run/log/journal
     clusterIssuer: cs-ca-clusterissuer
-    output:
-      hostAlias:
-        hostIP: 9.12.34.56
-        hostnames: [test.fyre.ibm.com]
-      splunk:
-        host: master
-        port: 8088
-        token: abc-123
   policyController:
     imageRegistry: quay.io/opencloudio/
     pullPolicy: IfNotPresent

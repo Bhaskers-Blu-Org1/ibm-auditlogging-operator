@@ -210,11 +210,11 @@ func BuildDaemonForFluentd(instance *operatorv1alpha1.AuditLogging) *appsv1.Daem
 		},
 	}
 
-	if instance.Spec.Fluentd.Output.HostAlias.HostIP != "" {
+	if instance.Spec.Fluentd.Output.HostAlias != (operatorv1alpha1.AuditLoggingSpecHostAlias{}) {
 		daemon.Spec.Template.Spec.HostAliases = []corev1.HostAlias{
 			{
 				IP:        instance.Spec.Fluentd.Output.HostAlias.HostIP,
-				Hostnames: instance.Spec.Fluentd.Output.HostAlias.Hostnames,
+				Hostnames: []string{instance.Spec.Fluentd.Output.HostAlias.Hostname},
 			},
 		}
 	}
@@ -416,7 +416,6 @@ func EqualPods(expected corev1.PodTemplateSpec, found corev1.PodTemplateSpec) bo
 		logger.Info("ServiceAccount not equal", "Found", found.Spec.ServiceAccountName, "Expected", expected.Spec.ServiceAccountName)
 		return false
 	}
-	// FIX compare null with empty
 	if !reflect.DeepEqual(found.Spec.HostAliases, expected.Spec.HostAliases) {
 		logger.Info("HostAliases not equal", "Found", found.Spec.HostAliases, "Expected", expected.Spec.HostAliases)
 		return false

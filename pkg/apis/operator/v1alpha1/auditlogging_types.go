@@ -76,8 +76,8 @@ type AuditLoggingSpecQRadar struct {
 
 // AuditLoggingSpecHostAlias defines the host alias for an SIEM
 type AuditLoggingSpecHostAlias struct {
-	HostIP    string   `json:"hostIP"`
-	Hostnames []string `json:"hostnames"`
+	HostIP   string `json:"hostIP"`
+	Hostname string `json:"hostname"`
 }
 
 // AuditLoggingStatus defines the observed state of AuditLogging

@@ -59,13 +59,11 @@ spec:
                       properties:
                         hostIP:
                           type: string
-                        hostnames:
-                          items:
-                            type: string
-                          type: array
+                        hostname:
+                          type: string
                       required:
                       - hostIP
-                      - hostnames
+                      - hostname
                       type: object
                     qradar:
                       description: AuditLoggingSpecQRadar defines the configurations
