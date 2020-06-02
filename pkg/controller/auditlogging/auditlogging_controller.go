@@ -134,6 +134,31 @@ func (r *ReconcileAuditLogging) Reconcile(request reconcile.Request) (reconcile.
 	var recResult reconcile.Result
 	var recErr error
 
+	/*
+		reconcilers := []func(*operatorv1alpha1.AuditLogging) (reconcile.Result, error){
+			r.reconcileAuditConfigMaps,
+			r.reconcileAuditCerts,
+			r.reconcileServiceAccount,
+			r.reconcileClusterRole,
+			r.reconcileClusterRoleBinding,
+			r.reconcileAuditPolicyResources,
+			r.reconcilePolicyControllerDeployment,
+			r.reconcileRole,
+			r.reconcileRoleBinding,
+			r.reconcileService,
+			r.reconcileFluentdDaemonSet,
+			r.checkIfBeingDeleted,
+			r.updateStatus,
+		}
+
+		for _, rec := range reconcilers {
+			recResult, recErr = rec(instance)
+			if recErr != nil || recResult.Requeue {
+				return recResult, recErr
+			}
+		}
+	*/
+
 	// Reconcile the expected configmaps
 	recResult, recErr = r.reconcileAuditConfigMaps(instance)
 	if recErr != nil || recResult.Requeue {
