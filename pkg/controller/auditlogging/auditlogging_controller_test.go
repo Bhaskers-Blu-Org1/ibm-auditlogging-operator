@@ -38,7 +38,9 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	extv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -172,6 +174,20 @@ func checkPolicyControllerConfig(t *testing.T, r ReconcileAuditLogging, req reco
 	err = r.client.Get(context.TODO(), types.NamespacedName{Name: res.AuditPolicyCRDName}, foundCRD)
 	if err != nil {
 		t.Fatalf("get CRD: (%v)", err)
+	}
+	_, err = r.Reconcile(req)
+	assert.NoError(err)
+
+	// Check Audit Policy CR is created
+	foundPolicy := &unstructured.Unstructured{}
+	foundPolicy.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   res.AuditPolicyGroup,
+		Kind:    res.AuditPolicyKind,
+		Version: res.AuditPolicyVersion,
+	})
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: res.DefaultAuditPolicyName, Namespace: res.InstanceNamespace}, foundPolicy)
+	if err != nil {
+		t.Fatalf("get AuditPolicy CR: (%v)", err)
 	}
 	_, err = r.Reconcile(req)
 	assert.NoError(err)
