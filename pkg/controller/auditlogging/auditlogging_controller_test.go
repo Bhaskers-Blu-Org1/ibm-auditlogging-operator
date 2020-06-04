@@ -88,26 +88,17 @@ func TestAuditLoggingController(t *testing.T) {
 	cr := buildAuditLogging(name)
 	r := getReconciler(cr)
 
-	initReconcile(t, r, req)
+	reconcileResources(t, r, req, true)
 	checkMountAndRBACPreReqs(t, r, req)
 	checkPolicyControllerConfig(t, r, req)
-	checkFluentdConfig(t, r, req, cr)
+	checkFluentdConfig(t, r, req)
+	checkAuditLoggingStatus(t, r, req, cr)
+	updateAuditLoggingCR(cr, t, r, req)
+	checkAuditLogging(t, r, req)
 	checkSIEMConfig(t, r, req)
 }
 
-// Init reconcile the AuditLogging CR
-func initReconcile(t *testing.T, r ReconcileAuditLogging, req reconcile.Request) {
-	assert := assert.New(t)
-	result, err := r.Reconcile(req)
-	assert.NoError(err)
-	// Check the result of reconciliation to make sure it has the desired state.
-	if !result.Requeue {
-		t.Error("reconcile did not requeue request as expected")
-	}
-}
-
 func checkMountAndRBACPreReqs(t *testing.T, r ReconcileAuditLogging, req reconcile.Request) {
-	assert := assert.New(t)
 	var err error
 	// Check if ConfigMaps are created and have data
 	foundCM := &corev1.ConfigMap{}
@@ -122,8 +113,7 @@ func checkMountAndRBACPreReqs(t *testing.T, r ReconcileAuditLogging, req reconci
 		if err != nil {
 			t.Fatalf("get configmap: (%v)", err)
 		}
-		_, err = r.Reconcile(req)
-		assert.NoError(err)
+		reconcileResources(t, r, req, true)
 	}
 
 	// Check if Certs are created
@@ -134,8 +124,7 @@ func checkMountAndRBACPreReqs(t *testing.T, r ReconcileAuditLogging, req reconci
 		if err != nil {
 			t.Fatalf("get cert: (%v)", err)
 		}
-		_, err = r.Reconcile(req)
-		assert.NoError(err)
+		reconcileResources(t, r, req, true)
 	}
 
 	// Check if ServiceAccount is created
@@ -144,12 +133,10 @@ func checkMountAndRBACPreReqs(t *testing.T, r ReconcileAuditLogging, req reconci
 	if err != nil {
 		t.Fatalf("get service account: (%v)", err)
 	}
-	_, err = r.Reconcile(req)
-	assert.NoError(err)
+	reconcileResources(t, r, req, true)
 }
 
 func checkPolicyControllerConfig(t *testing.T, r ReconcileAuditLogging, req reconcile.Request) {
-	assert := assert.New(t)
 	var err error
 
 	// Check if ClusterRole and ClusterRoleBinding are created
@@ -158,16 +145,14 @@ func checkPolicyControllerConfig(t *testing.T, r ReconcileAuditLogging, req reco
 	if err != nil {
 		t.Fatalf("get clusterrole: (%v)", err)
 	}
-	_, err = r.Reconcile(req)
-	assert.NoError(err)
+	reconcileResources(t, r, req, true)
 
 	foundCRB := &rbacv1.ClusterRoleBinding{}
 	err = r.client.Get(context.TODO(), types.NamespacedName{Name: res.AuditPolicyControllerDeploy + "-rolebinding"}, foundCRB)
 	if err != nil {
 		t.Fatalf("get clusterrolebinding: (%v)", err)
 	}
-	_, err = r.Reconcile(req)
-	assert.NoError(err)
+	reconcileResources(t, r, req, true)
 
 	// Check Audit Policy CRD is created
 	foundCRD := &extv1beta1.CustomResourceDefinition{}
@@ -175,9 +160,6 @@ func checkPolicyControllerConfig(t *testing.T, r ReconcileAuditLogging, req reco
 	if err != nil {
 		t.Fatalf("get CRD: (%v)", err)
 	}
-	_, err = r.Reconcile(req)
-	assert.NoError(err)
-
 	// Check Audit Policy CR is created
 	foundPolicy := &unstructured.Unstructured{}
 	foundPolicy.SetGroupVersionKind(schema.GroupVersionKind{
@@ -189,8 +171,7 @@ func checkPolicyControllerConfig(t *testing.T, r ReconcileAuditLogging, req reco
 	if err != nil {
 		t.Fatalf("get AuditPolicy CR: (%v)", err)
 	}
-	_, err = r.Reconcile(req)
-	assert.NoError(err)
+	reconcileResources(t, r, req, true)
 
 	// Check if Policy Controller Deployment has been created
 	pc := getAuditPolicyController(t, r)
@@ -198,12 +179,10 @@ func checkPolicyControllerConfig(t *testing.T, r ReconcileAuditLogging, req reco
 	if pc.Spec.Template.Spec.Containers[0].Image != image {
 		t.Fatalf("Incorrect policy controller image. Found: (%s), Expected: (%s)", pc.Spec.Template.Spec.Containers[0].Image, image)
 	}
-	_, err = r.Reconcile(req)
-	assert.NoError(err)
+	reconcileResources(t, r, req, true)
 }
 
-func checkFluentdConfig(t *testing.T, r ReconcileAuditLogging, req reconcile.Request, cr *operatorv1alpha1.AuditLogging) {
-	assert := assert.New(t)
+func checkFluentdConfig(t *testing.T, r ReconcileAuditLogging, req reconcile.Request) {
 	var err error
 
 	// Check if Role and Role Binding are created
@@ -212,16 +191,14 @@ func checkFluentdConfig(t *testing.T, r ReconcileAuditLogging, req reconcile.Req
 	if err != nil {
 		t.Fatalf("get role: (%v)", err)
 	}
-	_, err = r.Reconcile(req)
-	assert.NoError(err)
+	reconcileResources(t, r, req, true)
 
 	foundRB := &rbacv1.RoleBinding{}
 	err = r.client.Get(context.TODO(), types.NamespacedName{Name: res.FluentdDaemonSetName + "-rolebinding", Namespace: res.InstanceNamespace}, foundRB)
 	if err != nil {
 		t.Fatalf("get rolebinding: (%v)", err)
 	}
-	_, err = r.Reconcile(req)
-	assert.NoError(err)
+	reconcileResources(t, r, req, true)
 
 	// Check if Service is created
 	foundSvc := &corev1.Service{}
@@ -229,8 +206,7 @@ func checkFluentdConfig(t *testing.T, r ReconcileAuditLogging, req reconcile.Req
 	if err != nil {
 		t.Fatalf("get service: (%v)", err)
 	}
-	_, err = r.Reconcile(req)
-	assert.NoError(err)
+	reconcileResources(t, r, req, true)
 
 	// Check if fluentd DaemonSet is created
 	ds := getFluentd(t, r)
@@ -238,7 +214,10 @@ func checkFluentdConfig(t *testing.T, r ReconcileAuditLogging, req reconcile.Req
 	if ds.Spec.Template.Spec.Containers[0].Image != image {
 		t.Fatalf("Incorrect fluentd image. Found: (%s), Expected: (%s)", ds.Spec.Template.Spec.Containers[0].Image, image)
 	}
+}
 
+func checkAuditLoggingStatus(t *testing.T, r ReconcileAuditLogging, req reconcile.Request, cr *operatorv1alpha1.AuditLogging) {
+	reconcileResources(t, r, req, false)
 	// Create fake pods in namespace and collect their names to check against Status
 	var podLabels = res.LabelsForPodMetadata(res.FluentdName, cr.Name)
 	var pod = corev1.Pod{
@@ -254,7 +233,7 @@ func checkFluentdConfig(t *testing.T, r ReconcileAuditLogging, req reconcile.Req
 		randInt, _ = rand.Int(rand.Reader, big.NewInt(99999))
 		pod.ObjectMeta.Name = res.FluentdDaemonSetName + "-" + randInt.String()
 		podNames[i] = pod.ObjectMeta.Name
-		if err = r.client.Create(context.TODO(), pod.DeepCopy()); err != nil {
+		if err := r.client.Create(context.TODO(), pod.DeepCopy()); err != nil {
 			t.Fatalf("create pod %d: (%v)", i, err)
 		}
 	}
@@ -268,22 +247,12 @@ func checkFluentdConfig(t *testing.T, r ReconcileAuditLogging, req reconcile.Req
 	randInt, _ = rand.Int(rand.Reader, big.NewInt(99999))
 	pod.ObjectMeta.Name = res.AuditPolicyControllerDeploy + "-" + randInt.String()
 	podNames[i] = pod.ObjectMeta.Name
-	if err = r.client.Create(context.TODO(), pod.DeepCopy()); err != nil {
+	if err := r.client.Create(context.TODO(), pod.DeepCopy()); err != nil {
 		t.Fatalf("create pod %d: (%v)", i, err)
 	}
-
-	// Reconcile again so Reconcile() checks pods and updates the AuditLogging
-	// resources' Status.
-	result, err := r.Reconcile(req)
-	if err != nil {
-		t.Fatalf("reconcile: (%v)", err)
-	}
-	if result != (reconcile.Result{}) {
-		t.Error("reconcile did not return an empty Result")
-	}
+	reconcileResources(t, r, req, false)
 
 	// Check status
-
 	// Get the updated AuditLogging object.
 	al := getAuditLogging(t, r, req)
 	nodes := al.Status.Nodes
@@ -291,48 +260,31 @@ func checkFluentdConfig(t *testing.T, r ReconcileAuditLogging, req reconcile.Req
 	if !reflect.DeepEqual(podNames, nodes) {
 		t.Errorf("pod names %v did not match expected %v", nodes, podNames)
 	}
-
-	updateAuditLoggingCR(al, t, r, req)
-	checkAuditLogging(t, r, req)
 }
 
 func updateAuditLoggingCR(al *operatorv1alpha1.AuditLogging, t *testing.T, r ReconcileAuditLogging, req reconcile.Request) {
-	assert := assert.New(t)
 	al.Spec.Fluentd.JournalPath = dummyJournalPath
 	err := r.client.Update(context.TODO(), al)
 	if err != nil {
 		t.Fatalf("Failed to update CR: (%v)", err)
 	}
 	// update resources
-	result, err := r.Reconcile(req)
-	if !result.Requeue {
-		t.Error("reconcile did not requeue request as expected")
-	}
-	assert.NoError(err)
-
+	reconcileResources(t, r, req, true)
 	al.Spec.PolicyController.Verbosity = dummyVerbosity
 	err = r.client.Update(context.TODO(), al)
 	if err != nil {
 		t.Fatalf("Failed to update CR: (%v)", err)
 	}
 	// update resources
-	result, err = r.Reconcile(req)
-	if !result.Requeue {
-		t.Error("reconcile did not requeue request as expected")
-	}
-	assert.NoError(err)
+	reconcileResources(t, r, req, true)
 }
 
 func checkAuditLogging(t *testing.T, r ReconcileAuditLogging, req reconcile.Request) {
-	assert := assert.New(t)
 	var err error
-
 	policyController := getAuditPolicyController(t, r)
-	_, err = r.Reconcile(req)
-	assert.NoError(err)
+	reconcileResources(t, r, req, true)
 	fluentd := getFluentd(t, r)
-	_, err = r.Reconcile(req)
-	assert.NoError(err)
+	reconcileResources(t, r, req, false)
 	var found = false
 	for _, arg := range policyController.Spec.Template.Spec.Containers[0].Args {
 		if arg == "--v="+dummyVerbosity {
@@ -379,11 +331,7 @@ func checkSIEMConfig(t *testing.T, r ReconcileAuditLogging, req reconcile.Reques
 		t.Fatalf("Failed to update instance: (%v)", err)
 	}
 
-	result, err := r.Reconcile(req)
-	if !result.Requeue {
-		t.Error("reconcile did not requeue request as expected")
-	}
-	assert.NoError(err)
+	reconcileResources(t, r, req, true)
 
 	foundCM := &corev1.ConfigMap{}
 	err = r.client.Get(context.TODO(), types.NamespacedName{Name: res.FluentdDaemonSetName + "-" +
@@ -401,11 +349,7 @@ func checkSIEMConfig(t *testing.T, r ReconcileAuditLogging, req reconcile.Reques
 		t.Fatalf("Failed to update CR: (%v)", err)
 	}
 	// update splunk configmap
-	result, err = r.Reconcile(req)
-	if !result.Requeue {
-		t.Error("reconcile did not requeue request as expected")
-	}
-	assert.NoError(err)
+	reconcileResources(t, r, req, true)
 
 	updatedCM := &corev1.ConfigMap{}
 	err = r.client.Get(context.TODO(), types.NamespacedName{Name: res.FluentdDaemonSetName + "-" +
@@ -440,11 +384,7 @@ func checkSIEMConfig(t *testing.T, r ReconcileAuditLogging, req reconcile.Reques
 		t.Fatalf("Failed to update instance: (%v)", err)
 	}
 
-	result, err = r.Reconcile(req)
-	if !result.Requeue {
-		t.Error("reconcile did not requeue request as expected")
-	}
-	assert.NoError(err)
+	reconcileResources(t, r, req, true)
 
 	fluentd := getFluentd(t, r)
 	if len(fluentd.Spec.Template.Spec.HostAliases) == 0 || !reflect.DeepEqual(fluentd.Spec.Template.Spec.HostAliases[0].IP, dummyHostIP) ||
@@ -520,4 +460,16 @@ func getReconcileRequest(name string) reconcile.Request {
 			Name: name,
 		},
 	}
+}
+
+func reconcileResources(t *testing.T, r ReconcileAuditLogging, req reconcile.Request, requeue bool) {
+	assert := assert.New(t)
+	result, err := r.Reconcile(req)
+	if requeue {
+		// Check the result of reconciliation to make sure it has the desired state.
+		if !result.Requeue {
+			t.Error("reconcile did not requeue request as expected")
+		}
+	}
+	assert.NoError(err)
 }
